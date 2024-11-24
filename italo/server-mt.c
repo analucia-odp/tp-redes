@@ -5,12 +5,45 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <pthread.h>
 
 // man socket
 #include <sys/types.h>
 #include <sys/socket.h>
 
 #define BUFFER_SIZE 1024
+
+struct client_data {
+    int accept_connection_socket;
+    struct sockaddr_storage storage;
+};
+
+void * client_thread(void *data)
+{
+    struct client_data *client_data = (struct client_data *)data;
+    struct sockaddr *client_addr = (struct sockaddr *)(&client_data->storage);  
+
+    char client_addr_str[BUFFER_SIZE];
+    addrtostr(client_addr, client_addr_str, BUFFER_SIZE);
+    printf("[log] connection from %s\n", client_addr_str);
+
+    //recebe a mensagem do cliete
+    char buffer_data[BUFFER_SIZE];
+    memset(buffer_data, 0, BUFFER_SIZE);
+    size_t bytes_counter = recv(client_data->accept_connection_socket, buffer_data, BUFFER_SIZE-1, 0);
+
+    printf("[msg] %s, %d bytes: %s\n", client_addr_str, (int)bytes_counter, buffer_data);
+
+    //manda a resposta para o cliente
+    sprintf(buffer_data, "remote endpoint: %.1000s\n", client_addr_str);
+    size_t bytes_count_send;
+    bytes_count_send = send(client_data->accept_connection_socket, buffer_data, strlen(buffer_data)+1,0);
+    if (bytes_count_send != strlen(buffer_data)+1) logexit("send");
+
+    close(client_data->accept_connection_socket);
+
+    pthread_exit(EXIT_SUCCESS);
+}
 
 void usage(int argc, char **argv){
     printf("usage: %s <v4|v6> <server port\n", argv[0]);
@@ -72,23 +105,14 @@ int main (int argc, char**argv){
             logexit("accept");
         }
 
-        char client_addr_str[BUFFER_SIZE];
-        addrtostr(client_addr, client_addr_str, BUFFER_SIZE);
-        printf("[log] connection from %s\n", client_addr_str);
+        struct client_data *client_data = malloc(sizeof(*client_data));
+        if (!client_data) logexit("malloc");
 
-        //recebe a mensagem do cliete
-        char buffer_data[BUFFER_SIZE];
-        memset(buffer_data, 0, BUFFER_SIZE);
-        size_t bytes_counter = recv(accept_connection_socket, buffer_data, BUFFER_SIZE-1, 0);
+        client_data->accept_connection_socket = accept_connection_socket;
+        memcpy(&(client_data->storage), &client_storage, sizeof(client_storage));
 
-        printf("[msg] %s, %d bytes: %s\n", client_addr_str, (int)bytes_counter, buffer_data);
-
-        //manda a resposta para o cliente
-        sprintf(buffer_data, "remote endpoint: %.1000s\n", client_addr_str);
-        size_t bytes_count_send;
-        bytes_count_send = send(accept_connection_socket, buffer_data, strlen(buffer_data)+1,0);
-        if (bytes_count_send != strlen(buffer_data)+1) logexit("send");
-        close(accept_connection_socket);
+        pthread_t tid;
+        pthread_create(&tid, NULL, client_thread, client_data);
     }
 
     exit(EXIT_SUCCESS);
