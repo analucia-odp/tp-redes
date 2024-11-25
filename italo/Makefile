@@ -1,8 +1,8 @@
 all:
-	gcc -Wall -c commom.c
-	gcc -Wall client_italo.c commom.o -o client
-	gcc -Wall server_italo.c commom.o -o server
-	gcc -Wall -lpthread server-mt.c commom.o -o server-mt
+	gcc -std=c99 -g -c commom.c
+	gcc -std=c99 -g client.c commom.o -o client
+	gcc -std=c99 -g server.c commom.o -o server
+	gcc -std=c99 -g -lpthread server-mt.c commom.o -o server-mt
 
 clean:
-	rm -rf *.o client server
+	rm -rf *.o client server server-mt

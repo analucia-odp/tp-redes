@@ -5,6 +5,7 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <sys/select.h>
 
 // man socket
 #include <sys/types.h>
@@ -64,7 +65,22 @@ int main (int argc, char**argv){
     addrtostr(addr, addrstr, BUFFER_SIZE);
     printf("bound to %s, waiting connections\n", addrstr);
 
+    fd_set read_fds;
+    int max_fd;
+    FD_ZERO(&read_fds); // Limpa o conjunto de sockets de leitura
+    FD_SET(socket_response, &read_fds); // Adiciona o socket do servidor ao conjunto
+    max_fd = socket_response;
+
     while(1){
+
+        // Aguarda a atividade em algum dos sockets monitorados
+        int activity = select(max_fd + 1, &read_fds, NULL, NULL, NULL);
+
+        if (activity < 0) logexit("select");
+
+        if (FD_ISSET(socket_response, &read_fds)){
+            
+        }
         struct sockaddr *client_addr = (struct sockaddr *)(&client_storage);  
         socklen_t client_addr_len = sizeof(client_storage);
         accept_connection_socket = accept(socket_response, client_addr, &client_addr_len);

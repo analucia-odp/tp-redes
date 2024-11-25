@@ -78,35 +78,40 @@ void addrtostr(const struct sockaddr *addr, char *str, size_t strsize)
     if(str) snprintf(str, strsize, "IPV%d %s %hu", version, addrstr, port);
 }
 
-int server_sockaddr_init(const char *proto, const char* portstr, struct sockaddr_storage *storage)
+//
+
+int server_sockaddr_init(const char *protocol, const char* port_str, struct sockaddr_storage *storage)
 {
-    if (proto == NULL || portstr == NULL)
+    if (protocol == NULL || port_str == NULL)
     {
         return -1;
     }
 
-    uint16_t port = (uint16_t)atoi(portstr); // unsigned_short //toda porta tem 16 bits
+    uint16_t port = (uint16_t)atoi(port_str); // unsigned_short //toda porta tem até 16 bits
+    //Transforma a porta de string para unsigned_short
 
-    if (port == 0)
+    if (port == 0) //não existe porta 0
         return -1;
-    port = htons(port); // converte o número da porta dispositivo - rede (host to network short)
 
-    memset(storage, 0, sizeof(*storage));
-    if (strcmp(proto, "v4") == 0){
-        struct sockaddr_in *addr4 = (struct sockaddr_in *)storage; // transformei o ponteiro para apontar para um storage
-        addr4->sin_family = AF_INET;
-        addr4->sin_addr.s_addr = INADDR_ANY; //Qualquer endereço que o computador tenha na interface de rede dele
-        addr4->sin_port = port;
+    port = htons(port); // converte o número da porta do dispositivo para uma porta da rede (host to network short)
+
+    memset(storage, 0, sizeof(*storage)); //Zera o bloco de memória correspondente onde o storage está apontando, evita lixo.
+
+    if (strcmp(protocol, "v4") == 0){ // se o protocolo for IPV4
+        struct sockaddr_in *addr4 = (struct sockaddr_in *)storage; // Aloco minha struct com o tamanho correspondente IPV4
+        addr4->sin_family = AF_INET; //IPV4
+        addr4->sin_addr.s_addr = INADDR_ANY; //Aceito qualquer endereço que o computador tenha na interface de rede dele!
+        addr4->sin_port = port; //Porta em que o servidor vai se comunicar com os clientes
         return 0;
     }
-    else if (strcmp(proto, "v6") == 0){
-        struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)storage; // transformei o ponteiro para apontar para um storage
-        addr6->sin6_family = AF_INET6;
-        addr6->sin6_addr = in6addr_any;
-        addr6->sin6_port = port;
+    else if (strcmp(protocol, "v6") == 0){ // se o protocolo for IPV6
+        struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)storage; // Aloco minha struct com o tamanho correspondente IPV6
+        addr6->sin6_family = AF_INET6; //IPV6
+        addr6->sin6_addr = in6addr_any; //Aceito qualquer endereço que o computador tenha na interface de rede dele!
+        addr6->sin6_port = port; //Porta em que o servidor vai se comunicar com os clientes
         return 0;
     }
     else{
-        return -1;
+        return -1; //erro - indicou um protocolo inválido
     }
 }
