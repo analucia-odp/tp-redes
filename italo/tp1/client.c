@@ -55,11 +55,12 @@ int main(int argc, char **argv)
     char addrStr[BUFFER_SIZE];
     parseAddressToString(addr, addrStr, BUFFER_SIZE);
     printf("Connect to %s\n", addrStr);
+    char sendDataBuffer[BUFFER_SIZE];
+    char receiveDataBuffer[BUFFER_SIZE];
 
     while (1)
     {
         // Envio de mensagem
-        char sendDataBuffer[BUFFER_SIZE];
         memset(sendDataBuffer, 0, BUFFER_SIZE);
         printf("> ");
         fgets(sendDataBuffer, BUFFER_SIZE - 1, stdin);
@@ -76,9 +77,14 @@ int main(int argc, char **argv)
         }
 
         // Recebimento de mensagem
-        char receiveDataBuffer[BUFFER_SIZE];
         memset(receiveDataBuffer, 0, BUFFER_SIZE);
         int countReceive = recv(socket_response, receiveDataBuffer, BUFFER_SIZE, 0);
+        if (countReceive == 0){
+            printf("Connection closed by server\n");
+            break;
+        }
+        puts(receiveDataBuffer);
+        puts(sendDataBuffer);
     }
 
     close(socket_response);

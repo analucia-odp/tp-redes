@@ -74,6 +74,9 @@ int main(int argc, char **argv)
     printf("\nEsperando por novas conexões...");
     struct sockaddr_storage clientStorage;
 
+    char sendBufferDataClient[BUFFER_SIZE];
+    char receiveBufferDataClient[BUFFER_SIZE];
+
     while (1)
     {
         struct sockaddr *clientAddress = (struct sockaddr *)(&clientStorage);
@@ -83,35 +86,45 @@ int main(int argc, char **argv)
         {
             logexit("accept");
         }
-
         char clientAddresString[BUFFER_SIZE];
         parseAddressToString(clientAddress, clientAddresString, BUFFER_SIZE);
         printf("Conexão Aceita na porta %s\n", clientAddresString);
 
-        // Recebe mensagem do cliente
-        char receiveBufferDataClient[BUFFER_SIZE];
-        memset(receiveBufferDataClient, 0, BUFFER_SIZE);
+        while (1)
+        {
+            // Recebe mensagem do cliente
+            memset(receiveBufferDataClient, 0, BUFFER_SIZE);
 
-        size_t count = recv(acceptConnectionSocketClient, receiveBufferDataClient, BUFFER_SIZE, 0);
+            size_t count = recv(acceptConnectionSocketClient, receiveBufferDataClient, BUFFER_SIZE, 0);
 
-        // Envia mensagem para o client
-        char sendBufferDataClient[BUFFER_SIZE];
-        memset(sendBufferDataClient, 0, BUFFER_SIZE);
+            if (count == 0) {
+                // Conexão fechada pelo cliente
+                printf("Client disconnected\n");
+                break;
+            }
 
-        size_t bytes_count_send = send(acceptConnectionSocketClient, receiveBufferDataClient, strlen(receiveBufferDataClient) + 1, 0);
-        if (bytes_count_send != strlen(sendBufferDataClient)+1) logexit("send");
+            // Envia mensagem para o client
+            memset(sendBufferDataClient, 0, BUFFER_SIZE);
+            sprintf(sendBufferDataClient, "Mensagem recebida");
 
-        // if (strcmp(receiveBufferDataClient, "kill"))
-        // {
-        //     strcpy(sendBufferDataClient, "Succesful disconnect");
-        //     send(acceptConnectionSocketClient, sendBufferDataClient, strlen(sendBufferDataClient) + 1, 0);
-        //     close(acceptConnectionSocketClient);
-        // }
-        // else
-        // {
-        //     send(acceptConnectionSocketClient, receiveBufferDataClient, strlen(receiveBufferDataClient) + 1, 0);
-        // }
+            size_t bytes_count_send = send(acceptConnectionSocketClient, receiveBufferDataClient, strlen(receiveBufferDataClient) + 1, 0);
+            if (bytes_count_send != strlen(sendBufferDataClient) + 1)
+                logexit("send");
+
+            // if (strcmp(receiveBufferDataClient, "kill"))
+            // {
+            //     strcpy(sendBufferDataClient, "Succesful disconnect");
+            //     send(acceptConnectionSocketClient, sendBufferDataClient, strlen(sendBufferDataClient) + 1, 0);
+            //     close(acceptConnectionSocketClient);
+            // }
+            // else
+            // {
+            //     send(acceptConnectionSocketClient, receiveBufferDataClient, strlen(receiveBufferDataClient) + 1, 0);
+            // }
+        }
+        close(acceptConnectionSocketClient);
     }
 
+    close(socket_response);
     exit(EXIT_SUCCESS);
 }
