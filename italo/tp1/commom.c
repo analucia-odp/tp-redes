@@ -5,24 +5,23 @@ void logexit (const char *msg){
     exit(EXIT_FAILURE);
 }
 
-int addrparse(const char *addrstr, const char *portstr, struct sockaddr_storage *storage)
+int buildStorage(const char *internetAddress, const char *portstr, struct sockaddr_storage *storage)
 {
-    if (addrstr == NULL || portstr == NULL)
+    if (internetAddress == NULL || portstr == NULL)
     {
         return -1;
     }
 
-    uint16_t port = (uint16_t)atoi(portstr); // unsigned_short //toda porta tem 16 bits
-
+    //Toda porta tem 16 bits
+    uint16_t port = (uint16_t)atoi(portstr);
     if (port == 0)
         return -1;
-    port = htons(port); // converte o número da porta dispositivo - rede (host to network short)
-
-    // descobrir o tipo do endereço (IPV4 ou IPV6)
-    // eu nao posso descobrir pelo tamanho?
+    // Converte a porta da rede em uma porta do dispositivo
+    port = htons(port); 
 
     struct in_addr inaddr4; // 32-bit IP address
-    if (inet_pton(AF_INET, addrstr, &inaddr4))
+    int isIPV4 = inet_pton(AF_INET, internetAddress, &inaddr4);
+    if (isIPV4)
     {
         struct sockaddr_in *addr4 = (struct sockaddr_in *)storage; // transformei o ponteiro para apontar para um storage
         addr4->sin_family = AF_INET;
@@ -32,12 +31,12 @@ int addrparse(const char *addrstr, const char *portstr, struct sockaddr_storage 
     }
 
     struct in6_addr inaddr6; // 128-bit IP address
-    if (inet_pton(AF_INET6, addrstr, &inaddr6)) //Texto para representação de rede
+    int isIPV6 = inet_pton(AF_INET6, internetAddress, &inaddr6);
+    if (isIPV6)
     {
         struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)storage; // transformei o ponteiro para apontar para um storage
         addr6->sin6_family = AF_INET6;
         addr6->sin6_port = port;
-        // addr6->sin6_addr = inaddr6; //isso é um arranjo de 16 bytes
         memcpy(&(addr6->sin6_addr), &inaddr6, sizeof(inaddr6));
         return 0;
     }
@@ -45,7 +44,7 @@ int addrparse(const char *addrstr, const char *portstr, struct sockaddr_storage 
     return -1;
 }
 
-void addrtostr(const struct sockaddr *addr, char *str, size_t strsize)
+void parseAddressToString(const struct sockaddr *addr, char *str, size_t strsize)
 {
     int version;
     char addrstr[INET6_ADDRSTRLEN +1] = ""; //REPRESENTAÇAO TEXTUAL DE QUANTO VOCE TEM QUE ARMAZENAR UMA ESTRUTURA IPV4
@@ -75,36 +74,38 @@ void addrtostr(const struct sockaddr *addr, char *str, size_t strsize)
     else
         logexit("unknowm protocol family.");
 
-    if(str) snprintf(str, strsize, "IPV%d %s %hu", version, addrstr, port);
+    if(str) {
+        printf("Protocolo: IPV%d", version);
+        printf("\nEndereço: %s", addrstr);
+        // snprintf("\nPorta: %hu", port);
+        // snprintf(str, strsize, "IPV%d %s %hu", version, addrstr, port);
+    }
 }
 
-//
 
-int server_sockaddr_init(const char *protocol, const char* port_str, struct sockaddr_storage *storage)
+int buildStorageServer(const char *portServer, const char* portClient, struct sockaddr_storage *storage)
 {
-    if (protocol == NULL || port_str == NULL)
+    if (portServer == NULL || portClient == NULL)
     {
         return -1;
     }
 
-    uint16_t port = (uint16_t)atoi(port_str); // unsigned_short //toda porta tem até 16 bits
-    //Transforma a porta de string para unsigned_short
+    uint16_t port = (uint16_t)atoi(portClient);
 
-    if (port == 0) //não existe porta 0
+    if (port == 0)
         return -1;
 
     port = htons(port); // converte o número da porta do dispositivo para uma porta da rede (host to network short)
-
     memset(storage, 0, sizeof(*storage)); //Zera o bloco de memória correspondente onde o storage está apontando, evita lixo.
 
-    if (strcmp(protocol, "v4") == 0){ // se o protocolo for IPV4
+    if (strcmp(portServer, "v4") == 0){ // se o protocolo for IPV4
         struct sockaddr_in *addr4 = (struct sockaddr_in *)storage; // Aloco minha struct com o tamanho correspondente IPV4
         addr4->sin_family = AF_INET; //IPV4
         addr4->sin_addr.s_addr = INADDR_ANY; //Aceito qualquer endereço que o computador tenha na interface de rede dele!
         addr4->sin_port = port; //Porta em que o servidor vai se comunicar com os clientes
         return 0;
     }
-    else if (strcmp(protocol, "v6") == 0){ // se o protocolo for IPV6
+    else if (strcmp(portServer, "v6") == 0){ // se o protocolo for IPV6
         struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)storage; // Aloco minha struct com o tamanho correspondente IPV6
         addr6->sin6_family = AF_INET6; //IPV6
         addr6->sin6_addr = in6addr_any; //Aceito qualquer endereço que o computador tenha na interface de rede dele!

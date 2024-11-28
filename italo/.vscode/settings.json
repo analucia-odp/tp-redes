@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "commom.h": "c"
+        "commom.h": "c",
+        "string.h": "c"
     }
 }
