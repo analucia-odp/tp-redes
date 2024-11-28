@@ -77,20 +77,30 @@ int main (int argc, char**argv){
         addrtostr(client_addr, client_addr_str, BUFFER_SIZE);
         printf("[log] connection from %s\n", client_addr_str);
 
-        //recebe a mensagem do cliete
-        char buffer_data[BUFFER_SIZE];
-        memset(buffer_data, 0, BUFFER_SIZE);
-        size_t bytes_counter = recv(accept_connection_socket, buffer_data, BUFFER_SIZE-1, 0);
+        while (1) {
+            //recebe a mensagem do cliente
+            char buffer_data[BUFFER_SIZE];
+            memset(buffer_data, 0, BUFFER_SIZE);
+            size_t bytes_counter = recv(accept_connection_socket, buffer_data, BUFFER_SIZE-1, 0);
 
-        printf("[msg] %s, %d bytes: %s\n", client_addr_str, (int)bytes_counter, buffer_data);
+            if (bytes_counter == 0) {
+                // Conexão fechada pelo cliente
+                printf("Client disconnected\n");
+                break;
+            }
 
-        //manda a resposta para o cliente
-        sprintf(buffer_data, "remote endpoint: %.1000s\n", client_addr_str);
-        size_t bytes_count_send;
-        bytes_count_send = send(accept_connection_socket, buffer_data, strlen(buffer_data)+1,0);
-        if (bytes_count_send != strlen(buffer_data)+1) logexit("send");
+            printf("[msg] %s, %d bytes: %s\n", client_addr_str, (int)bytes_counter, buffer_data);
+
+            //manda a resposta para o cliente
+            sprintf(buffer_data, "remote endpoint: %.1000s\n", client_addr_str);
+            size_t bytes_count_send;
+            bytes_count_send = send(accept_connection_socket, buffer_data, strlen(buffer_data)+1,0);
+            if (bytes_count_send != strlen(buffer_data)+1) logexit("send");
+        }
+
         close(accept_connection_socket);
     }
 
+    close(socket_response);
     exit(EXIT_SUCCESS);
 }
