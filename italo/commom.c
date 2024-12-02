@@ -78,7 +78,6 @@ void addrtostr(const struct sockaddr *addr, char *str, size_t strsize)
     if(str) snprintf(str, strsize, "IPV%d %s %hu", version, addrstr, port);
 }
 
-//
 
 int server_sockaddr_init(const char *protocol, const char* port_str, struct sockaddr_storage *storage)
 {
@@ -87,10 +86,8 @@ int server_sockaddr_init(const char *protocol, const char* port_str, struct sock
         return -1;
     }
 
-    uint16_t port = (uint16_t)atoi(port_str); // unsigned_short //toda porta tem até 16 bits
-    //Transforma a porta de string para unsigned_short
-
-    if (port == 0) //não existe porta 0
+    uint16_t port = (uint16_t)atoi(port_str);
+    if (port == 0)
         return -1;
 
     port = htons(port); // converte o número da porta do dispositivo para uma porta da rede (host to network short)
