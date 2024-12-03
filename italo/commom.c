@@ -79,9 +79,9 @@ void addrtostr(const struct sockaddr *addr, char *str, size_t strsize)
 }
 
 
-int server_sockaddr_init(const char *protocol, const char* port_str, struct sockaddr_storage *storage)
+int server_sockaddr_init(const char* port_str, struct sockaddr_storage *storage)
 {
-    if (protocol == NULL || port_str == NULL)
+    if (port_str == NULL)
     {
         return -1;
     }
@@ -94,21 +94,14 @@ int server_sockaddr_init(const char *protocol, const char* port_str, struct sock
 
     memset(storage, 0, sizeof(*storage)); //Zera o bloco de memória correspondente onde o storage está apontando, evita lixo.
 
-    if (strcmp(protocol, "v4") == 0){ // se o protocolo for IPV4
-        struct sockaddr_in *addr4 = (struct sockaddr_in *)storage; // Aloco minha struct com o tamanho correspondente IPV4
-        addr4->sin_family = AF_INET; //IPV4
-        addr4->sin_addr.s_addr = INADDR_ANY; //Aceito qualquer endereço que o computador tenha na interface de rede dele!
-        addr4->sin_port = port; //Porta em que o servidor vai se comunicar com os clientes
-        return 0;
-    }
-    else if (strcmp(protocol, "v6") == 0){ // se o protocolo for IPV6
-        struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)storage; // Aloco minha struct com o tamanho correspondente IPV6
-        addr6->sin6_family = AF_INET6; //IPV6
-        addr6->sin6_addr = in6addr_any; //Aceito qualquer endereço que o computador tenha na interface de rede dele!
-        addr6->sin6_port = port; //Porta em que o servidor vai se comunicar com os clientes
-        return 0;
-    }
-    else{
-        return -1; //erro - indicou um protocolo inválido
-    }
+    // struct sockaddr_in *addr4 = (struct sockaddr_in *)storage; // Aloco minha struct com o tamanho correspondente IPV4
+    // addr4->sin_family = AF_INET; //IPV4
+    // addr4->sin_addr.s_addr = INADDR_ANY; //Aceito qualquer endereço que o computador tenha na interface de rede dele!
+    // addr4->sin_port = port;
+    //Porta em que o servidor vai se comunicar com os clientes
+    struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)storage; // Aloco minha struct com o tamanho correspondente IPV6
+    addr6->sin6_family = AF_INET6; //IPV6
+    addr6->sin6_addr = in6addr_any; //Aceito qualquer endereço que o computador tenha na interface de rede dele!
+    addr6->sin6_port = port; //Porta em que o servidor vai se comunicar com os clientes
+    return 0;
 }

@@ -9,28 +9,49 @@
 
 #define BUFFER_SIZE 1024
 
-void log_error_message_invalid_arguments(int argc, char **argv)
+void log_error_message_invalid_arguments()
 {
     printf("Invalid arguments!\n");
-    printf("Example IPV4: %s 127.0.0.1 50000 60000 1\n", argv[0]);
-    printf("Example IPV6: %s ::1 50000 60000 1\n", argv[0]);
+    printf("Example IPV4: ./client 127.0.0.1 50000 60000 1\n");
+    printf("Example IPV6: ./client ::1 50000 60000 1\n");
     exit(EXIT_FAILURE);
+}
+
+int initSocketClient(const char *addr, const char *port, struct sockaddr_storage *storage)
+{
+    int hasValidParseAddrStorage = addrparse(addr, port, storage);
+    if (hasValidParseAddrStorage == -1)
+    {
+        log_error_message_invalid_arguments();
+    }
+
+    // Abertura socket
+    int socket_response = socket(storage->ss_family, SOCK_STREAM, 0);
+    if (socket_response == -1)
+    {
+        logexit("socket");
+    }
+
+    return socket_response;
+}
+
+int connectSocketClient(int socket, struct sockaddr_storage *storage)
+{
+    struct sockaddr *addr = (struct sockaddr *)(storage);
+    int connect_response = connect(socket, addr, sizeof(*storage));
+    if (connect_response != 0)
+    {
+        logexit("connect");
+    }
+    return connect_response;
 }
 
 int main(int argc, char **argv)
 {
-    int socket_response;
-    int connect_response;
-    char addrstr[BUFFER_SIZE];
-    char data_buffer[BUFFER_SIZE];
-    int count;
-
-    if (argc < 5)
-    {
-        log_error_message_invalid_arguments(argc, argv);
-    }
-
-    printf("passou do argc\n");
+    // if (argc < 5)
+    // {
+    //     log_error_message_invalid_arguments();
+    // }
 
     if (atoi(argv[4]) < 1 || atoi(argv[4]) > 10)
     {
@@ -38,28 +59,21 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
-    struct sockaddr_storage storage;
-    int hasValidParseAddrStorage = addrparse(argv[1], argv[2], &storage);
-    if (hasValidParseAddrStorage == -1)
-    {
-        log_error_message_invalid_arguments(argc, argv);
-    }
+    struct sockaddr_storage storageUserServer;
+    struct sockaddr_storage storageLocationServer;
 
-    // Abertura socket
-    socket_response = socket(storage.ss_family, SOCK_STREAM, 0);
-    if (socket_response == -1)
-    {
-        logexit("socket");
-    }
+    char *addr = argv[1];
+    char *portUserServer = argv[2];
+    char *portLocationServer = argv[3];
+    char *localizationCode = argv[4];
 
-    //Abertura Ativa
-    struct sockaddr *addr = (struct sockaddr *)(&storage);
-    connect_response = connect(socket_response, addr, sizeof(storage));
-    if (connect_response != 0)
-    {
-        logexit("connect");
-    }
-    printf("passou do connect\n");
+    // Inicialização Sockets
+    int socketUserServer = initSocketClient(addr, portUserServer, &storageUserServer);
+    int socketLocationServer = initSocketClient(addr, portLocationServer, &storageLocationServer);
+
+    // Abertura Ativa
+    int connectUserServer = connectSocketClient(socketUserServer, &storageUserServer);
+    int connectLocationServer = connectSocketClient(socketLocationServer, &storageLocationServer);
 
     char sendDataBuffer[BUFFER_SIZE];
     char receiveDataBuffer[BUFFER_SIZE];
@@ -92,7 +106,14 @@ int main(int argc, char **argv)
         memset(sendDataBuffer, 0, BUFFER_SIZE);
         printf("mensagem > ");
         fgets(sendDataBuffer, BUFFER_SIZE - 1, stdin);
-        count = send(socket_response, sendDataBuffer, strlen(sendDataBuffer) + 1, 0);
+        int count = send(socketUserServer, sendDataBuffer, strlen(sendDataBuffer) + 1, 0);
+
+        if (count != strlen(sendDataBuffer) + 1)
+        {
+            logexit("send");
+        }
+
+        count = send(socketLocationServer, sendDataBuffer, strlen(sendDataBuffer) + 1, 0);
 
         if (count != strlen(sendDataBuffer) + 1)
         {
@@ -101,7 +122,8 @@ int main(int argc, char **argv)
 
         // Recebimento de mensagem
         memset(receiveDataBuffer, 0, BUFFER_SIZE);
-        count = recv(socket_response, receiveDataBuffer, BUFFER_SIZE, 0);
+        count = recv(socketUserServer, receiveDataBuffer, BUFFER_SIZE, 0);
+        count = recv(socketLocationServer, receiveDataBuffer, BUFFER_SIZE, 0);
         if (count == 0)
         {
             // Conexão fechada pelo servidor
@@ -112,6 +134,7 @@ int main(int argc, char **argv)
         puts(sendDataBuffer);
     }
 
-    close(socket_response);
+    close(socketUserServer);
+    close(socketLocationServer);
     exit(EXIT_SUCCESS);
 }

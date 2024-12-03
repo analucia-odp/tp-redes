@@ -20,6 +20,16 @@ struct user
     short int lastLocalization;
 };
 
+int open_socket(struct sockaddr_storage *storage)
+{
+    int socket_response = socket(AF_INET6, SOCK_STREAM, 0);
+    if (socket_response == -1)
+    {
+        logexit("socket");
+    }
+    return socket_response;
+}
+
 void log_error_message_invalid_arguments(int argc, char **argv)
 {
     printf("Invalid arguments!\n");
@@ -39,27 +49,41 @@ int main(int argc, char **argv)
     struct sockaddr_storage client_storage;
     struct sockaddr_storage storage;
 
+    //Configurações iniciais
     if (argc < 3)
     {
         log_error_message_invalid_arguments(argc, argv);
     }
 
-    int isServerInit = server_sockaddr_init(argv[1], argv[2], &storage);
+    // Socket
+    socket_response = socket(AF_INET6, SOCK_STREAM, 0);
+    if (socket_response == -1)
+    {
+        logexit("socket");
+    }
+
+    //Desliga a opção IPV6_V6ONLY
+    const char *portPeer = argv[1];
+    const char *portClient = argv[2];
+    int enable = 0;
+
+    int setsockopt_result = setsockopt(socket_response, IPPROTO_IPV6, IPV6_V6ONLY, &enable, sizeof(enable));
+    if (setsockopt_result == -1)
+    {
+        logexit("setsockopt IPV6_V6ONLY");
+    }
+
+    // Inicializa a estrutura do servidor
+    int isServerInit = server_sockaddr_init(portClient, &storage);
 
     if (isServerInit == -1)
     {
         log_error_message_invalid_arguments(argc, argv);
     }
 
-    // Socket
-    socket_response = socket(storage.ss_family, SOCK_STREAM, 0);
-    if (socket_response == -1)
-    {
-        logexit("socket");
-    }
-
-    int enable = 1;
-    int setsockopt_result = setsockopt(socket_response, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int));
+    //Permite reuso de endereço
+    int enable_reuse = 1;
+    int setsockopt_result_address = setsockopt(socket_response, SOL_SOCKET, SO_REUSEADDR, &enable_reuse, sizeof(int));
     if (setsockopt_result == -1)
     {
         logexit("setsockopt");
@@ -105,14 +129,17 @@ int main(int argc, char **argv)
         // Accept
         struct sockaddr *clientAddress = (struct sockaddr *)(&client_storage);
         socklen_t clientAddressLen = sizeof(client_storage);
-        printf("esperando o accept ..\n");
         int acceptConnectionSocketClient = accept(socket_response, clientAddress, &clientAddressLen);
-        printf("accept deu certo..\n");
         if (acceptConnectionSocketClient == -1)
         {
             logexit("accept");
         }
         activeConnections++;
+
+        if (activeConnections >=10){
+            printf("Client limit exceeded");
+            close(acceptConnectionSocketClient);
+        }
 
         char clientAddress_str[BUFFER_SIZE];
         addrtostr(clientAddress, clientAddress_str, BUFFER_SIZE);
