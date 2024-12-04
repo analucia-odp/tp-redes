@@ -13,10 +13,16 @@
 
 #define BUFFER_SIZE 1024
 
-struct user
+// struct user
+// {
+//     unsigned int userId;
+//     bool hasPermission;
+//     short int lastLocalization;
+// };
+
+struct client
 {
-    unsigned int userId;
-    bool hasPermission;
+    int clientId;
     short int lastLocalization;
 };
 
@@ -49,7 +55,7 @@ int main(int argc, char **argv)
     struct sockaddr_storage client_storage;
     struct sockaddr_storage storage;
 
-    //Configurações iniciais
+    // Configurações iniciais
     if (argc < 3)
     {
         log_error_message_invalid_arguments(argc, argv);
@@ -62,7 +68,7 @@ int main(int argc, char **argv)
         logexit("socket");
     }
 
-    //Desliga a opção IPV6_V6ONLY
+    // Desliga a opção IPV6_V6ONLY
     const char *portPeer = argv[1];
     const char *portClient = argv[2];
     int enable = 0;
@@ -81,7 +87,7 @@ int main(int argc, char **argv)
         log_error_message_invalid_arguments(argc, argv);
     }
 
-    //Permite reuso de endereço
+    // Permite reuso de endereço
     int enable_reuse = 1;
     int setsockopt_result_address = setsockopt(socket_response, SOL_SOCKET, SO_REUSEADDR, &enable_reuse, sizeof(int));
     if (setsockopt_result == -1)
@@ -107,25 +113,19 @@ int main(int argc, char **argv)
     }
 
     addrtostr(addr, addrstr, BUFFER_SIZE);
-    printf("Servidor executando em %s\n", addrstr);
-    printf("Esperando por novas conexões...\n");
+    // printf("Servidor executando em %s\n", addrstr);
+    // printf("Esperando por novas conexões...\n");
 
     char sendBufferDataClient[BUFFER_SIZE];
     char receiveBufferDataClient[BUFFER_SIZE];
     // struct user *users = NULL;
     // size_t user_count = 0;
 
+    struct client *clients = NULL;
     int activeConnections = 0;
 
     while (1)
     {
-        // if (activeConnections >= 10){
-        //     printf("Client limit exceeded");
-        //     memset(sendBufferDataClient, 0, BUFFER_SIZE);
-        //     strcpy(sendBufferDataClient, "Client limit exceeded");
-        //     int bytes_count_send = send(acceptConnectionSocketClient, sendBufferDataClient, strlen(sendBufferDataClient)+1,0);
-
-        // }
         // Accept
         struct sockaddr *clientAddress = (struct sockaddr *)(&client_storage);
         socklen_t clientAddressLen = sizeof(client_storage);
@@ -136,7 +136,8 @@ int main(int argc, char **argv)
         }
         activeConnections++;
 
-        if (activeConnections >=10){
+        if (activeConnections >= 10)
+        {
             printf("Client limit exceeded");
             close(acceptConnectionSocketClient);
         }
@@ -144,6 +145,16 @@ int main(int argc, char **argv)
         char clientAddress_str[BUFFER_SIZE];
         addrtostr(clientAddress, clientAddress_str, BUFFER_SIZE);
         printf("Conexão estabelecida com %s\n", clientAddress_str);
+
+        struct client *temp = realloc(clients, (activeConnections) * sizeof(struct client));
+        if (temp == NULL)
+        {
+            perror("Failed to allocate memory");
+            free(clients);
+            exit(EXIT_FAILURE);
+        }
+
+        clients = temp;
 
         // Cadastro de usuário
         // struct user *temp = realloc(users, (user_count + 1) * sizeof(struct user));
@@ -179,11 +190,23 @@ int main(int argc, char **argv)
                 break;
             }
 
-            printf("Mensagem recebida: %s\n", receiveBufferDataClient);
+            if (strstr(receiveBufferDataClient, "REQ_CONN") != NULL)
+            {
+                clients[activeConnections].clientId = activeConnections;
+                short int locId;
+                sscanf(receiveBufferDataClient, "REQ_CONN(%hd)", &locId);
+                clients[activeConnections].lastLocalization = locId;
+                memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                snprintf(sendBufferDataClient, BUFFER_SIZE, "RES_CONN(%d)", clients[activeConnections].clientId);
+                printf("sendBufferDataClient: %s\n", sendBufferDataClient);
+                printf("Client %d added (Loc %d)\n", clients[activeConnections].clientId, clients[activeConnections].lastLocalization);
+            }
+            else
+            {
+                printf("Client %d sent message: %s\n", 1, receiveBufferDataClient);
+            }
 
             // Envia mensagem para o client
-            memset(sendBufferDataClient, 0, BUFFER_SIZE);
-            sprintf(sendBufferDataClient, "Recebi sua mensagem!");
             size_t bytes_count_send;
             bytes_count_send = send(acceptConnectionSocketClient, sendBufferDataClient, strlen(sendBufferDataClient) + 1, 0);
             if (bytes_count_send != strlen(sendBufferDataClient) + 1)
