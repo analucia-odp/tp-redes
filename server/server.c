@@ -199,7 +199,7 @@ int main(int argc, char **argv)
             char str[20];
             // ------------- REQ_CONN -------------
             sprintf(str, "%d", REQ_CONN);
-            if (strstr(receiveBufferDataClient, str) != NULL)
+            if (strstr(receiveBufferDataClient, "20") != NULL)
             {
                 clients[count_client].clientId = getpid();
                 short int locId;
@@ -213,7 +213,7 @@ int main(int argc, char **argv)
 
             // ------------- REQ_DISC -------------
             sprintf(str, "%d", REQ_DISC);
-            if (strstr(receiveBufferDataClient, str) != NULL)
+            if (strstr(receiveBufferDataClient, "22") != NULL)
             {
                 short int clientId;
                 sscanf(receiveBufferDataClient, "22 %hd", &clientId);
@@ -227,7 +227,6 @@ int main(int argc, char **argv)
                         oldLocId = clients[i].locId;
                         clients[i].locId = 0;
                         printf("Client removed %hd (Loc %hd)\n", clientId, oldLocId);
-                        // printf("cu de fossa\n");
                         snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Succesful disconnect");
                         clientDisconnect = 1;
                         break;
@@ -238,6 +237,44 @@ int main(int argc, char **argv)
                 {
                     memset(sendBufferDataClient, 0, BUFFER_SIZE);
                     snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "Client not found");
+                }
+            }
+
+            // ------------- REQ_USRADD -------------
+            sprintf(str, "%d", REQ_USRADD);
+            if (strstr(receiveBufferDataClient, "33") != NULL)
+            {
+                int hasPermission;
+                char userId[10];
+                sscanf(receiveBufferDataClient, "33 %s %d", userId, &hasPermission);
+                int findUser = 0;
+                for (int i = 0; i < count_user; i++)
+                {
+                    if (strcmp(users[i].userId, userId) == 0)
+                    {
+                        users[i].hasPermission = hasPermission;
+                        memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                        snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Successful update");
+                        findUser = 1;
+                        break;
+                    }
+                }
+
+                if (!findUser)
+                {
+                    if (count_user >= 30)
+                    {
+                        memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                        snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User limit exceeded");
+                    }
+                    else
+                    {
+                        users[count_user].userId = userId;
+                        users[count_user].hasPermission = hasPermission;
+                        memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                        snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Successful add");
+                        count_user++;
+                    }
                 }
             }
 

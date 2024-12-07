@@ -68,10 +68,6 @@ void receiveMessage(int socket, char *buffer)
 
 int main(int argc, char **argv)
 {
-    // if (argc < 5)
-    // {
-    //     log_error_message_invalid_arguments();
-    // }
 
     if (atoi(argv[4]) < 1 || atoi(argv[4]) > 10)
     {
@@ -135,6 +131,8 @@ int main(int argc, char **argv)
         memset(sendDataBuffer, 0, BUFFER_SIZE);
         printf("mensagem > ");
         fgets(sendDataBuffer, BUFFER_SIZE - 1, stdin);
+
+        // Fechamento de conexão
         if (strcmp(sendDataBuffer, "kill\n") == 0)
         {
             // SEND REQ_DISC
@@ -168,21 +166,38 @@ int main(int argc, char **argv)
             break;
         }
 
-        // sendMessage(socketUserServer, sendDataBuffer);
-        // sendMessage(socketLocationServer, sendDataBuffer);
-        // int count;
-        // // Recebimento de mensagem
-        // memset(receiveDataBuffer, 0, BUFFER_SIZE);
-        // count = recv(socketUserServer, receiveDataBuffer, BUFFER_SIZE, 0);
-        // count = recv(socketLocationServer, receiveDataBuffer, BUFFER_SIZE, 0);
-        // if (count == 0)
-        // {
-        //     // Conexão fechada pelo servidor
-        //     printf("Server disconnected\n");
-        //     break;
-        // }
-        // puts(receiveDataBuffer);
-        // puts(sendDataBuffer);
+        // Adiciona usuário
+        if (strstr(sendDataBuffer, "add") != NULL)
+        {
+            char uuid[10];
+            int isEspecial;
+            sscanf(sendDataBuffer, "add %s %d", uuid, &isEspecial);
+            memset(sendDataBuffer, 0, BUFFER_SIZE);
+            snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s %d", REQ_USRADD, uuid, isEspecial);
+            sendMessage(socketUserServer, sendDataBuffer);
+            receiveMessage(socketUserServer, receiveDataBuffer);
+
+            char str[20];
+            sprintf(str, "%d", OK);
+            if (strstr(receiveDataBuffer, str) != NULL)
+            {
+                char buffer[BUFFER_SIZE];
+                char buffer2[BUFFER_SIZE];
+                sscanf(receiveDataBuffer, "0 %s %s", buffer, buffer2);
+                if (strcmp(buffer2, "add") == 0)
+                {
+                    printf("New user added: %s\n", uuid);
+                }
+                else
+                {
+                    printf("User updated: %s\n", uuid);
+                }
+            }
+            else if (strstr(receiveDataBuffer, "255") != NULL)
+            {
+                printf("%s\n", receiveDataBuffer);
+            }
+        }
     }
 
     close(socketUserServer);
