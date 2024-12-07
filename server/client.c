@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <stdbool.h>
 
 #define BUFFER_SIZE 1024
 
@@ -59,6 +60,7 @@ void receiveMessage(int socket, char *buffer)
 {
     memset(buffer, 0, BUFFER_SIZE);
     int count = recv(socket, buffer, BUFFER_SIZE, 0);
+    // printf("COUNT %d\n", count);
     if (count == 0)
     {
         // Conexão fechada pelo servidor
@@ -110,12 +112,17 @@ int main(int argc, char **argv)
     sprintf(str, "%d", RES_CONN);
     short int clientUserId;
     short int locationUserId;
+    int hasConectedUserServer = 0, hasConectedLocationServer = 0;
 
     if (strstr(receiveDataBuffer, str) != NULL)
     {
         sscanf(receiveDataBuffer, "21 %hd", &clientId);
         printf("SU New ID: %hd\n", clientId);
         clientUserId = clientId;
+        hasConectedUserServer = 1;
+    }
+    else{
+        printf("%s\n", receiveDataBuffer);
     }
     // Recebe resposta do servidor de localização
     receiveMessage(socketLocationServer, receiveDataBuffer);
@@ -124,7 +131,16 @@ int main(int argc, char **argv)
         sscanf(receiveDataBuffer, "21 %hd", &clientId);
         printf("SL New ID: %hd\n", clientId);
         locationUserId = clientId;
+        hasConectedUserServer = 1;
     }
+    else{
+        printf("%s\n", receiveDataBuffer);
+    }
+
+    if(!hasConectedUserServer && !hasConectedLocationServer){
+        exit(EXIT_FAILURE);
+    }
+
     while (1)
     {
         // Envio de mensagem
@@ -167,61 +183,80 @@ int main(int argc, char **argv)
         }
 
         // Adiciona usuário
-        if (strstr(sendDataBuffer, "add") != NULL)
+        else if (strstr(sendDataBuffer, "add") != NULL)
         {
             char uuid[10];
             int isEspecial;
             sscanf(sendDataBuffer, "add %s %d", uuid, &isEspecial);
-            memset(sendDataBuffer, 0, BUFFER_SIZE);
-            snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s %d", REQ_USRADD, uuid, isEspecial);
-            sendMessage(socketUserServer, sendDataBuffer);
-            receiveMessage(socketUserServer, receiveDataBuffer);
-
-            char str[20];
-            sprintf(str, "%d", OK);
-            if (strstr(receiveDataBuffer, str) != NULL)
+            bool hasValidAdd = strlen(uuid) == 10 && (isEspecial == 0 || isEspecial == 1);
+            if (hasValidAdd)
             {
-                char buffer[BUFFER_SIZE];
-                char buffer2[BUFFER_SIZE];
-                sscanf(receiveDataBuffer, "0 %s %s", buffer, buffer2);
-                if (strcmp(buffer2, "add") == 0)
+                memset(sendDataBuffer, 0, BUFFER_SIZE);
+                snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s %d", REQ_USRADD, uuid, isEspecial);
+                sendMessage(socketUserServer, sendDataBuffer);
+                receiveMessage(socketUserServer, receiveDataBuffer);
+
+                char str[20];
+                sprintf(str, "%d", OK);
+                if (strstr(receiveDataBuffer, str) != NULL)
                 {
-                    printf("New user added: %s\n", uuid);
+                    char buffer[BUFFER_SIZE];
+                    char buffer2[BUFFER_SIZE];
+                    sscanf(receiveDataBuffer, "0 %s %s", buffer, buffer2);
+                    if (strcmp(buffer2, "add") == 0)
+                    {
+                        printf("New user added: %s\n", uuid);
+                    }
+                    else
+                    {
+                        printf("User updated: %s\n", uuid);
+                    }
                 }
-                else
+                else if (strstr(receiveDataBuffer, "255") != NULL)
                 {
-                    printf("User updated: %s\n", uuid);
+                    printf("%s\n", receiveDataBuffer);
                 }
             }
-            else if (strstr(receiveDataBuffer, "255") != NULL)
+            else
             {
-                printf("%s\n", receiveDataBuffer);
+                printf("Invalid arguments\n");
             }
         }
 
         // Encontra localização usuário
-        if (strstr(sendDataBuffer, "find") != NULL)
+        else if (strstr(sendDataBuffer, "find") != NULL)
         {
             char buffer[BUFFER_SIZE];
             char uuid[10];
             sscanf(sendDataBuffer, "find %s", uuid);
-            memset(sendDataBuffer, 0, BUFFER_SIZE);
-            snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s", REQ_USRLOC, uuid);
-            sendMessage(socketLocationServer, sendDataBuffer);
-            receiveMessage(socketLocationServer, receiveDataBuffer);
+            if (strlen(uuid) == 10)
+            {
+                memset(sendDataBuffer, 0, BUFFER_SIZE);
+                snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s", REQ_USRLOC, uuid);
+                sendMessage(socketLocationServer, sendDataBuffer);
+                receiveMessage(socketLocationServer, receiveDataBuffer);
 
-            char str[20];
-            sprintf(str, "%d", RES_USRLOC);
-            if (strstr(receiveDataBuffer, str) != NULL)
-            {
-                short int locId;
-                sscanf(receiveDataBuffer, "39 %hd", &locId);
-                printf("Current location: %d\n", locId);
+                char str[20];
+                sprintf(str, "%d", RES_USRLOC);
+                if (strstr(receiveDataBuffer, str) != NULL)
+                {
+                    short int locId;
+                    sscanf(receiveDataBuffer, "39 %hd", &locId);
+                    printf("Current location: %d\n", locId);
+                }
+                else if (strstr(receiveDataBuffer, "255") != NULL)
+                {
+                    printf("%s\n", receiveDataBuffer);
+                }
             }
-            else if (strstr(receiveDataBuffer, "255") != NULL)
-            {
-                printf("%s\n", receiveDataBuffer);
+            else{
+                printf("Invalid arguments\n");
             }
+        }
+
+        else
+        {
+            printf("Invalid command\n");
         }
     }
 

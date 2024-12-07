@@ -49,7 +49,7 @@ int accept_socket(int socket_response, struct sockaddr_storage client_storage)
 
     char clientAddress_str[BUFFER_SIZE];
     addrtostr(clientAddress, clientAddress_str, BUFFER_SIZE);
-    printf("Conexão estabelecida com %s\n", clientAddress_str);
+    // printf("Conexão estabelecida com %s\n", clientAddress_str);
 
     return acceptConnectionSocketClient;
 }
@@ -178,16 +178,18 @@ int main(int argc, char **argv)
         int acceptConnectionSocketClient = accept_socket(socket_response, client_storage);
         activeConnections++;
 
-        if (activeConnections >= 10)
-        {
-            printf("Client limit exceeded");
-            close(acceptConnectionSocketClient);
-            activeConnections--;
-            continue;
-        }
-
         while (1)
         {
+            if (activeConnections > 10)
+            {
+                printf("Client limit exceeded\n");
+                memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "Client limit exceeded");
+                send_message(acceptConnectionSocketClient, sendBufferDataClient);
+                close(acceptConnectionSocketClient);
+                activeConnections--;
+                break;
+            }
             // Recebe mensagem do usuário
             int receive_message_response = receive_message(acceptConnectionSocketClient, receiveBufferDataClient);
             // printf("Mensagem recebida: %s\n", receiveBufferDataClient);
@@ -280,7 +282,7 @@ int main(int argc, char **argv)
             }
 
             // ------------- REQ_USRADD -------------
-            sprintf(str, "%d",  REQ_USRLOC);
+            sprintf(str, "%d", REQ_USRLOC);
             if (strstr(receiveBufferDataClient, str) != NULL)
             {
                 char userId[10];
