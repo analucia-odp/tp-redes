@@ -100,69 +100,90 @@ int main(int argc, char **argv)
 
     // Abertura de comunicação de Cliente com Servidores
     memset(sendDataBuffer, 0, BUFFER_SIZE);
-    snprintf(sendDataBuffer, sizeof(sendDataBuffer), "REQ_CONN(%s)", localizationCode);
+    snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s", REQ_CONN, localizationCode);
 
+    // Envia pedido de comunicação
     sendMessage(socketUserServer, sendDataBuffer);
     sendMessage(socketLocationServer, sendDataBuffer);
 
     short int clientId;
 
+    // Recebe resposta do servidor de usuario
     receiveMessage(socketUserServer, receiveDataBuffer);
-    if (strstr(receiveDataBuffer, "RES_CONN") != NULL)
+    char str[20];
+    sprintf(str, "%d", RES_CONN);
+    short int clientUserId;
+    short int locationUserId;
+
+    if (strstr(receiveDataBuffer, str) != NULL)
     {
-        sscanf(receiveDataBuffer, "RES_CONN(%hd)", &clientId);
+        sscanf(receiveDataBuffer, "21 %hd", &clientId);
         printf("SU New ID: %hd\n", clientId);
+        clientUserId = clientId;
     }
+    // Recebe resposta do servidor de localização
     receiveMessage(socketLocationServer, receiveDataBuffer);
-    if (strstr(receiveDataBuffer, "RES_CONN") != NULL)
+    if (strstr(receiveDataBuffer, str) != NULL)
     {
-        sscanf(receiveDataBuffer, "RES_CONN(%hd)", &clientId);
+        sscanf(receiveDataBuffer, "21 %hd", &clientId);
         printf("SL New ID: %hd\n", clientId);
+        locationUserId = clientId;
     }
+    while (1)
+    {
+        // Envio de mensagem
+        memset(sendDataBuffer, 0, BUFFER_SIZE);
+        printf("mensagem > ");
+        fgets(sendDataBuffer, BUFFER_SIZE - 1, stdin);
+        if (strcmp(sendDataBuffer, "kill\n") == 0)
+        {
+            // SEND REQ_DISC
+            memset(sendDataBuffer, 0, BUFFER_SIZE);
+            snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %hd", REQ_DISC, clientUserId);
+            sendMessage(socketUserServer, sendDataBuffer);
+            memset(sendDataBuffer, 0, BUFFER_SIZE);
+            snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %hd", REQ_DISC, locationUserId);
+            sendMessage(socketLocationServer, sendDataBuffer);
 
-    // while (1)
-    // {
-    //     // // Recebimento de mensagem
-    //     // memset(receiveDataBuffer, 0, BUFFER_SIZE);
-    //     // count = recv(socket_response, receiveDataBuffer, BUFFER_SIZE, 0);
-    //     // if (count == 0)
-    //     // {
-    //     //     // Conexão fechada pelo servidor
-    //     //     printf("Server disconnected\n");
-    //     //     break;
-    //     // }
+            // RCV REQ_DISC
+            receiveMessage(socketUserServer, receiveDataBuffer);
+            // printf("mensagem recebida %s\n", receiveDataBuffer);
+            if (strstr(receiveDataBuffer, "0") != NULL)
+            {
+                printf("SU Successful disconnect\n");
+            }
+            else if (strstr(receiveDataBuffer, "255") != NULL)
+            {
+                printf("%s\n", receiveDataBuffer);
+            }
+            receiveMessage(socketLocationServer, receiveDataBuffer);
+            if (strstr(receiveDataBuffer, "0") != NULL)
+            {
+                printf("SL Successful disconnect\n");
+            }
+            else if (strstr(receiveDataBuffer, "255") != NULL)
+            {
+                printf("%s\n", receiveDataBuffer);
+            }
+            break;
+        }
 
-    //     // Envio de mensagem
-    //     memset(sendDataBuffer, 0, BUFFER_SIZE);
-    //     printf("mensagem > ");
-    //     fgets(sendDataBuffer, BUFFER_SIZE - 1, stdin);
-    //     int count = send(socketUserServer, sendDataBuffer, strlen(sendDataBuffer) + 1, 0);
-
-    //     if (count != strlen(sendDataBuffer) + 1)
-    //     {
-    //         logexit("send");
-    //     }
-
-    //     count = send(socketLocationServer, sendDataBuffer, strlen(sendDataBuffer) + 1, 0);
-
-    //     if (count != strlen(sendDataBuffer) + 1)
-    //     {
-    //         logexit("send");
-    //     }
-
-    //     // Recebimento de mensagem
-    //     memset(receiveDataBuffer, 0, BUFFER_SIZE);
-    //     count = recv(socketUserServer, receiveDataBuffer, BUFFER_SIZE, 0);
-    //     count = recv(socketLocationServer, receiveDataBuffer, BUFFER_SIZE, 0);
-    //     if (count == 0)
-    //     {
-    //         // Conexão fechada pelo servidor
-    //         printf("Server disconnected\n");
-    //         break;
-    //     }
-    //     puts(receiveDataBuffer);
-    //     puts(sendDataBuffer);
-    // }
+        // sendMessage(socketUserServer, sendDataBuffer);
+        // sendMessage(socketLocationServer, sendDataBuffer);
+        // int count;
+        // // Recebimento de mensagem
+        // memset(receiveDataBuffer, 0, BUFFER_SIZE);
+        // count = recv(socketUserServer, receiveDataBuffer, BUFFER_SIZE, 0);
+        // count = recv(socketLocationServer, receiveDataBuffer, BUFFER_SIZE, 0);
+        // if (count == 0)
+        // {
+        //     // Conexão fechada pelo servidor
+        //     printf("Server disconnected\n");
+        //     break;
+        // }
+        // puts(receiveDataBuffer);
+        // puts(sendDataBuffer);
+    }
 
     close(socketUserServer);
     close(socketLocationServer);

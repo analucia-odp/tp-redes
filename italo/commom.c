@@ -97,12 +97,6 @@ int server_sockaddr_init(const char *port_str, struct sockaddr_storage *storage)
     port = htons(port); // converte o número da porta do dispositivo para uma porta da rede (host to network short)
 
     memset(storage, 0, sizeof(*storage)); // Zera o bloco de memória correspondente onde o storage está apontando, evita lixo.
-
-    // struct sockaddr_in *addr4 = (struct sockaddr_in *)storage; // Aloco minha struct com o tamanho correspondente IPV4
-    // addr4->sin_family = AF_INET; //IPV4
-    // addr4->sin_addr.s_addr = INADDR_ANY; //Aceito qualquer endereço que o computador tenha na interface de rede dele!
-    // addr4->sin_port = port;
-    // Porta em que o servidor vai se comunicar com os clientes
     struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)storage; // Aloco minha struct com o tamanho correspondente IPV6
     addr6->sin6_family = AF_INET6;                               // IPV6
     addr6->sin6_addr = in6addr_any;                              // Aceito qualquer endereço que o computador tenha na interface de rede dele!
@@ -110,22 +104,22 @@ int server_sockaddr_init(const char *port_str, struct sockaddr_storage *storage)
     return 0;
 }
 
-// void messagesControl(int message, char server)
-// {
-//     switch (message)
-//     {
-//         case RES_CONN:
-//             if (server == 'U')
-//             {
-//                 printf("SU New ID: %s\n", message);
-//             }
-//             else if (server == 'L')
-//             {
-//                 printf("SL New ID: %s\n", message);
-//             }
-//             break;
+void messagesControl(int opcode, char server, int atributo)
+{
+    switch (opcode)
+    {
+        case RES_CONN:
+            if (server == 'U')
+            {
+                printf("SU New ID: %d\n", atributo);
+            }
+            else if (server == 'L')
+            {
+                printf("SL New ID: %d\n", atributo);
+            }
+            break;
 
-//         default:
-//             break;
-//     }
-// }
+        default:
+            break;
+    }
+}
