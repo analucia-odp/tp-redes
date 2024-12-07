@@ -210,7 +210,7 @@ int main(int argc, char **argv)
                 clients[count_client].locId = locId;
                 memset(sendBufferDataClient, 0, BUFFER_SIZE);
                 snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %d", RES_CONN, clients[count_client].clientId);
-                printf("Client %d added (Loc %d)\n", clients[count_client].clientId, clients[count_client].locId = locId);
+                printf("Client %d added (Loc %d)\n", clients[count_client].clientId, clients[count_client].locId);
                 count_client++;
             }
 
