@@ -190,6 +190,7 @@ int main(int argc, char **argv)
         {
             // Recebe mensagem do usuário
             int receive_message_response = receive_message(acceptConnectionSocketClient, receiveBufferDataClient);
+            // printf("Mensagem recebida: %s\n", receiveBufferDataClient);
             if (!receive_message_response)
             {
                 activeConnections--;
@@ -199,7 +200,7 @@ int main(int argc, char **argv)
             char str[20];
             // ------------- REQ_CONN -------------
             sprintf(str, "%d", REQ_CONN);
-            if (strstr(receiveBufferDataClient, "20") != NULL)
+            if (strstr(receiveBufferDataClient, str) != NULL)
             {
                 clients[count_client].clientId = getpid();
                 short int locId;
@@ -213,7 +214,7 @@ int main(int argc, char **argv)
 
             // ------------- REQ_DISC -------------
             sprintf(str, "%d", REQ_DISC);
-            if (strstr(receiveBufferDataClient, "22") != NULL)
+            if (strstr(receiveBufferDataClient, str) != NULL)
             {
                 short int clientId;
                 sscanf(receiveBufferDataClient, "22 %hd", &clientId);
@@ -242,7 +243,7 @@ int main(int argc, char **argv)
 
             // ------------- REQ_USRADD -------------
             sprintf(str, "%d", REQ_USRADD);
-            if (strstr(receiveBufferDataClient, "33") != NULL)
+            if (strstr(receiveBufferDataClient, str) != NULL)
             {
                 int hasPermission;
                 char userId[10];
@@ -275,6 +276,31 @@ int main(int argc, char **argv)
                         snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Successful add");
                         count_user++;
                     }
+                }
+            }
+
+            // ------------- REQ_USRADD -------------
+            sprintf(str, "%d",  REQ_USRLOC);
+            if (strstr(receiveBufferDataClient, str) != NULL)
+            {
+                char userId[10];
+                sscanf(receiveBufferDataClient, "38 %s", userId);
+                int findUser = 0;
+                for (int i = 0; i < count_user; i++)
+                {
+                    if (strcmp(users[i].userId, userId) == 0)
+                    {
+                        memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                        snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %d", RES_USRLOC, users[i].locId);
+                        findUser = 1;
+                        break;
+                    }
+                }
+
+                if (!findUser)
+                {
+                    memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                    snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User not found");
                 }
             }
 

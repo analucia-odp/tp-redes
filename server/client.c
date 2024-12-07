@@ -198,6 +198,31 @@ int main(int argc, char **argv)
                 printf("%s\n", receiveDataBuffer);
             }
         }
+
+        // Encontra localização usuário
+        if (strstr(sendDataBuffer, "find") != NULL)
+        {
+            char buffer[BUFFER_SIZE];
+            char uuid[10];
+            sscanf(sendDataBuffer, "find %s", uuid);
+            memset(sendDataBuffer, 0, BUFFER_SIZE);
+            snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s", REQ_USRLOC, uuid);
+            sendMessage(socketLocationServer, sendDataBuffer);
+            receiveMessage(socketLocationServer, receiveDataBuffer);
+
+            char str[20];
+            sprintf(str, "%d", RES_USRLOC);
+            if (strstr(receiveDataBuffer, str) != NULL)
+            {
+                short int locId;
+                sscanf(receiveDataBuffer, "39 %hd", &locId);
+                printf("Current location: %d\n", locId);
+            }
+            else if (strstr(receiveDataBuffer, "255") != NULL)
+            {
+                printf("%s\n", receiveDataBuffer);
+            }
+        }
     }
 
     close(socketUserServer);
