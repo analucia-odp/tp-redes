@@ -27,14 +27,79 @@ struct client
     short int locId;
 };
 
-int open_socket(struct sockaddr_storage *storage)
+void init_setsockopt_ipv6(int socket_response)
+{
+    int enable = 0;
+
+    int setsockopt_result = setsockopt(socket_response, IPPROTO_IPV6, IPV6_V6ONLY, &enable, sizeof(enable));
+    if (setsockopt_result == -1)
+    {
+        logexit("setsockopt IPV6_V6ONLY");
+    }
+}
+
+void init_setsockopt_reuse(int socket_response)
+{
+    int enable = 1;
+
+    int setsockopt_result = setsockopt(socket_response, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int));
+    if (setsockopt_result == -1)
+    {
+        logexit("setsockopt SO_REUSEADDR");
+    }
+}
+
+void initialize_server_structure(struct sockaddr_storage *storage, const char *port)
+{
+    int isServerInit = server_sockaddr_init(port, storage);
+    if (isServerInit == -1)
+    {
+        logexit("server_sockaddr_init");
+    }
+}
+
+int open_socket(struct sockaddr_storage *storage, const char *port)
 {
     int socket_response = socket(AF_INET6, SOCK_STREAM, 0);
     if (socket_response == -1)
     {
         logexit("socket");
     }
+
+    init_setsockopt_ipv6(socket_response);
+    init_setsockopt_reuse(socket_response);
+    initialize_server_structure(storage, port);
+
     return socket_response;
+}
+
+int passive_open(int socket_response, struct sockaddr_storage storage)
+{
+    struct sockaddr *addr = (struct sockaddr *)(&storage);
+    int bind_response = bind(socket_response, addr, sizeof(storage));
+    if (bind_response != 0)
+    {
+        return 0;
+    }
+
+    int listen_response = listen(socket_response, 10);
+    if (listen_response != 0)
+    {
+        logexit("listen");
+    }
+
+    return 1;
+}
+
+int active_open(int socket, struct sockaddr_storage *storage)
+{
+    struct sockaddr *addr = (struct sockaddr *)(storage);
+    int connect_response = connect(socket, addr, sizeof(*storage));
+    if (connect_response != 0)
+    {
+        logexit("connect");
+    }
+    return connect_response;
 }
 
 int accept_socket(int socket_response, struct sockaddr_storage client_storage)
@@ -87,7 +152,6 @@ void log_error_message_invalid_arguments(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-    int socket_response;
     int bind_response;
     int listen_response;
     int accept_connection_socket;
@@ -96,6 +160,7 @@ int main(int argc, char **argv)
 
     struct sockaddr_storage client_storage;
     struct sockaddr_storage storage;
+    struct sockaddr_storage storage_peer;
 
     // Configurações iniciais
     if (argc < 3)
@@ -104,61 +169,80 @@ int main(int argc, char **argv)
     }
 
     // Socket
-    socket_response = socket(AF_INET6, SOCK_STREAM, 0);
-    if (socket_response == -1)
-    {
-        logexit("socket");
-    }
-
-    // Desliga a opção IPV6_V6ONLY
     const char *portPeer = argv[1];
     const char *portClient = argv[2];
-    int enable = 0;
 
-    int setsockopt_result = setsockopt(socket_response, IPPROTO_IPV6, IPV6_V6ONLY, &enable, sizeof(enable));
-    if (setsockopt_result == -1)
+    int socket_response = open_socket(&storage, portClient);
+    int socket_response_peer = open_socket(&storage_peer, portPeer);
+
+    // --------------- Abertura Passiva para clientes ------------
+    int passive_open_clients_ok = passive_open(socket_response, storage);
+
+    // --------------- Abertura Passiva para servidores ------------
+    char sendBufferDataPeer[BUFFER_SIZE];
+    char receiveBufferDataPeer[BUFFER_SIZE];
+    int passive_open_server_ok = passive_open(socket_response_peer, storage_peer);
+    int serverIds[BUFFER_SIZE];
+    int count_server = 0;
+
+    if (passive_open_server_ok)
     {
-        logexit("setsockopt IPV6_V6ONLY");
+        int active_connections_peer = 0;
+        printf("No peer found, starting to listen...\n");
+        int accept_connection_socket_peer = accept_socket(socket_response_peer, storage_peer);
+        active_connections_peer++;
+        if (active_connections_peer > 1)
+        {
+            // printf("Peer limit exceeded\n");
+            memset(sendBufferDataPeer, 0, BUFFER_SIZE);
+            snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %s", ERROR, "Peer limit exceeded");
+            send_message(accept_connection_socket_peer, sendBufferDataPeer);
+            close(accept_connection_socket_peer);
+            active_connections_peer--;
+        }
+        else
+        {
+            serverIds[count_server] = getpid();
+            count_server++;
+            printf("Peer %d added\n", serverIds[count_server]);
+            memset(sendBufferDataPeer, 0, BUFFER_SIZE);
+            snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %d", RES_CONNPEER, serverIds[count_server]);
+            send_message(accept_connection_socket_peer, sendBufferDataPeer);
+            int receive_response = receive_message(accept_connection_socket_peer, receiveBufferDataPeer);
+            if (strstr(receiveBufferDataPeer, "18") != NULL)
+            {
+                int serverId;
+                sscanf(receiveBufferDataPeer, "18 %d", &serverId);
+                printf("New Peer ID: %d\n", serverId);
+            }
+        }
+    }
+    else
+    {
+        // ---------------- Abertura ativa --------------------------------
+        int connect_peer_server = active_open(socket_response_peer, &storage_peer);
+        int receive_response = receive_message(socket_response_peer, receiveBufferDataPeer);
+        if (strstr(receiveBufferDataPeer, "255") != NULL)
+        {
+            printf("%s\n", receiveBufferDataPeer);
+        }
+        if (strstr(receiveBufferDataPeer, "18") != NULL)
+        {
+            int serverId;
+            sscanf(receiveBufferDataPeer, "18 %d", &serverId);
+            printf("New Peer ID: %d\n", serverId);
+            serverIds[count_server] = getpid();
+            count_server++;
+            printf("Peer %d connected\n", serverIds[count_server]);
+            memset(sendBufferDataPeer, 0, BUFFER_SIZE);
+            snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %d", RES_CONNPEER, serverIds[count_server]);
+            send_message(socket_response_peer, sendBufferDataPeer);
+        }
     }
 
-    // Inicializa a estrutura do servidor
-    int isServerInit = server_sockaddr_init(portClient, &storage);
-
-    if (isServerInit == -1)
-    {
-        log_error_message_invalid_arguments(argc, argv);
-    }
-
-    // Permite reuso de endereço
-    int enable_reuse = 1;
-    int setsockopt_result_address = setsockopt(socket_response, SOL_SOCKET, SO_REUSEADDR, &enable_reuse, sizeof(int));
-    if (setsockopt_result == -1)
-    {
-        logexit("setsockopt");
-    }
-
-    // --------------- Abertura Passiva ------------
-
-    // Bind
-    struct sockaddr *addr = (struct sockaddr *)(&storage);
-    bind_response = bind(socket_response, addr, sizeof(storage));
-    if (bind_response != 0)
-    {
-        logexit("bind");
-    }
-
-    // Listen
-    listen_response = listen(socket_response, 10); // quantidade de conexões que podem estar pendentes para tratamento
-    if (listen_response != 0)
-    {
-        logexit("listen");
-    }
-
-    addrtostr(addr, addrstr, BUFFER_SIZE);
-
+    // addrtostr(addr, addrstr, BUFFER_SIZE);
     char sendBufferDataClient[BUFFER_SIZE];
     char receiveBufferDataClient[BUFFER_SIZE];
-
     // struct user *users = NULL;
     struct user users[BUFFER_SIZE];
     for (int i = 0; i < BUFFER_SIZE; i++)
