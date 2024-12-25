@@ -33,10 +33,17 @@
 #define ERROR         255
 #define OK            0
 
+#define BUFFER_SIZE 1024
+
 int addrparse(const char *addrstr, const char *portstr, struct sockaddr_storage *storage);
 void addrtostr(const struct sockaddr *addr, char *str, size_t strsize);
 int server_sockaddr_init(const char* portstr, struct sockaddr_storage *storage);
 void logexit (const char *msg);
+void send_message(int socket, char *message);
+int active_open(int socket, struct sockaddr_storage *storage);
+int receive_message(int socket, char *buffer);
+int passive_open(int socket, struct sockaddr_storage storage);
+int accept_socket(int socket, struct sockaddr_storage storage);
 
 #endif
 

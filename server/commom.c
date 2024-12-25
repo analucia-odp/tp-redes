@@ -6,6 +6,8 @@ void logexit(const char *msg)
     exit(EXIT_FAILURE);
 }
 
+// --------------- Estruturas de inicialização ------------------
+
 int addrparse(const char *addrstr, const char *portstr, struct sockaddr_storage *storage)
 {
     if (addrstr == NULL || portstr == NULL)
@@ -18,9 +20,6 @@ int addrparse(const char *addrstr, const char *portstr, struct sockaddr_storage 
     if (port == 0)
         return -1;
     port = htons(port); // converte o número da porta dispositivo - rede (host to network short)
-
-    // descobrir o tipo do endereço (IPV4 ou IPV6)
-    // eu nao posso descobrir pelo tamanho?
 
     struct in_addr inaddr4; // 32-bit IP address
     if (inet_pton(AF_INET, addrstr, &inaddr4))
@@ -104,22 +103,67 @@ int server_sockaddr_init(const char *port_str, struct sockaddr_storage *storage)
     return 0;
 }
 
-void messagesControl(int opcode, char server, int atributo)
-{
-    switch (opcode)
-    {
-        case RES_CONN:
-            if (server == 'U')
-            {
-                printf("SU New ID: %d\n", atributo);
-            }
-            else if (server == 'L')
-            {
-                printf("SL New ID: %d\n", atributo);
-            }
-            break;
+// --------------- Estruturas de manipulação ------------------
 
-        default:
-            break;
+void send_message(int socket, char *message){
+    size_t bytes_count_send;
+    bytes_count_send = send(socket, message, strlen(message) + 1, 0);
+    if (bytes_count_send != strlen(message) + 1)
+        logexit("send");
+}
+
+int active_open(int socket, struct sockaddr_storage *storage)
+{
+    struct sockaddr *addr = (struct sockaddr *)(storage);
+    int connect_response = connect(socket, addr, sizeof(*storage));
+    if (connect_response != 0)
+    {
+        logexit("connect");
     }
+    return connect_response;
+}
+
+int receive_message(int socket, char *buffer)
+{
+    memset(buffer, 0, BUFFER_SIZE);
+    size_t bytes_counter = recv(socket, buffer, BUFFER_SIZE - 1, 0);
+    if (bytes_counter == 0)
+    {
+        return 0;
+    }
+    return 1;
+}
+
+int passive_open(int socket, struct sockaddr_storage storage)
+{
+    struct sockaddr *addr = (struct sockaddr *)(&storage);
+    int bind_response = bind(socket, addr, sizeof(storage));
+    if (bind_response != 0)
+    {
+        return 0;
+    }
+
+    int listen_response = listen(socket, 10);
+    if (listen_response != 0)
+    {
+        logexit("listen");
+    }
+
+    return 1;
+}
+
+int accept_socket(int socket, struct sockaddr_storage storage)
+{
+    struct sockaddr *clientAddress = (struct sockaddr *)(&storage);
+    socklen_t clientAddressLen = sizeof(storage);
+    int acceptConnectionSocketClient = accept(socket, clientAddress, &clientAddressLen);
+    if (acceptConnectionSocketClient == -1)
+    {
+        logexit("accept");
+    }
+
+    char clientAddress_str[BUFFER_SIZE];
+    addrtostr(clientAddress, clientAddress_str, BUFFER_SIZE);
+
+    return acceptConnectionSocketClient;
 }

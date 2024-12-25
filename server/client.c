@@ -18,7 +18,7 @@ void log_error_message_invalid_arguments()
     exit(EXIT_FAILURE);
 }
 
-int initSocketClient(const char *addr, const char *port, struct sockaddr_storage *storage)
+int init_socket(const char *addr, const char *port, struct sockaddr_storage *storage)
 {
     int hasValidParseAddrStorage = addrparse(addr, port, storage);
     if (hasValidParseAddrStorage == -1)
@@ -36,31 +36,10 @@ int initSocketClient(const char *addr, const char *port, struct sockaddr_storage
     return socket_response;
 }
 
-void sendMessage(int socket, char *message)
-{
-    int count = send(socket, message, strlen(message) + 1, 0);
-    if (count != strlen(message) + 1)
-    {
-        logexit("send");
-    }
-}
-
-int connectSocketClient(int socket, struct sockaddr_storage *storage)
-{
-    struct sockaddr *addr = (struct sockaddr *)(storage);
-    int connect_response = connect(socket, addr, sizeof(*storage));
-    if (connect_response != 0)
-    {
-        logexit("connect");
-    }
-    return connect_response;
-}
-
 void receiveMessage(int socket, char *buffer)
 {
     memset(buffer, 0, BUFFER_SIZE);
     int count = recv(socket, buffer, BUFFER_SIZE, 0);
-    // printf("COUNT %d\n", count);
     if (count == 0)
     {
         // Conexão fechada pelo servidor
@@ -73,7 +52,7 @@ int main(int argc, char **argv)
 
     if (atoi(argv[4]) < 1 || atoi(argv[4]) > 10)
     {
-        printf("Invalid argument");
+        printf("Invalid argument\n");
         exit(EXIT_FAILURE);
     }
 
@@ -86,12 +65,12 @@ int main(int argc, char **argv)
     char *localizationCode = argv[4];
 
     // Inicialização Sockets
-    int socketUserServer = initSocketClient(addr, portUserServer, &storageUserServer);
-    int socketLocationServer = initSocketClient(addr, portLocationServer, &storageLocationServer);
+    int socketUserServer = init_socket(addr, portUserServer, &storageUserServer);
+    int socketLocationServer = init_socket(addr, portLocationServer, &storageLocationServer);
 
     // Abertura Ativa
-    int connectUserServer = connectSocketClient(socketUserServer, &storageUserServer);
-    int connectLocationServer = connectSocketClient(socketLocationServer, &storageLocationServer);
+    int connectUserServer = active_open(socketUserServer, &storageUserServer);
+    int connectLocationServer = active_open(socketLocationServer, &storageLocationServer);
 
     char sendDataBuffer[BUFFER_SIZE];
     char receiveDataBuffer[BUFFER_SIZE];
@@ -101,8 +80,8 @@ int main(int argc, char **argv)
     snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s", REQ_CONN, localizationCode);
 
     // Envia pedido de comunicação
-    sendMessage(socketUserServer, sendDataBuffer);
-    sendMessage(socketLocationServer, sendDataBuffer);
+    send_message(socketUserServer, sendDataBuffer);
+    send_message(socketLocationServer, sendDataBuffer);
 
     short int clientId;
 
@@ -114,7 +93,7 @@ int main(int argc, char **argv)
     short int locationUserId;
     int hasConectedUserServer = 0, hasConectedLocationServer = 0;
 
-    if (strstr(receiveDataBuffer, str) != NULL)
+    if (strncmp(receiveDataBuffer, str, strlen(str)) == 0)
     {
         sscanf(receiveDataBuffer, "21 %hd", &clientId);
         printf("SU New ID: %hd\n", clientId);
@@ -126,7 +105,7 @@ int main(int argc, char **argv)
     }
     // Recebe resposta do servidor de localização
     receiveMessage(socketLocationServer, receiveDataBuffer);
-    if (strstr(receiveDataBuffer, str) != NULL)
+    if (strncmp(receiveDataBuffer, str, strlen(str)) == 0)
     {
         sscanf(receiveDataBuffer, "21 %hd", &clientId);
         printf("SL New ID: %hd\n", clientId);
@@ -154,14 +133,13 @@ int main(int argc, char **argv)
             // SEND REQ_DISC
             memset(sendDataBuffer, 0, BUFFER_SIZE);
             snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %hd", REQ_DISC, clientUserId);
-            sendMessage(socketUserServer, sendDataBuffer);
+            send_message(socketUserServer, sendDataBuffer);
             memset(sendDataBuffer, 0, BUFFER_SIZE);
             snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %hd", REQ_DISC, locationUserId);
-            sendMessage(socketLocationServer, sendDataBuffer);
+            send_message(socketLocationServer, sendDataBuffer);
 
             // RCV REQ_DISC
             receiveMessage(socketUserServer, receiveDataBuffer);
-            // printf("mensagem recebida %s\n", receiveDataBuffer);
             if (strstr(receiveDataBuffer, "0") != NULL)
             {
                 printf("SU Successful disconnect\n");
@@ -193,12 +171,12 @@ int main(int argc, char **argv)
             {
                 memset(sendDataBuffer, 0, BUFFER_SIZE);
                 snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s %d", REQ_USRADD, uuid, isEspecial);
-                sendMessage(socketUserServer, sendDataBuffer);
+                send_message(socketUserServer, sendDataBuffer);
                 receiveMessage(socketUserServer, receiveDataBuffer);
 
                 char str[20];
                 sprintf(str, "%d", OK);
-                if (strstr(receiveDataBuffer, str) != NULL)
+                if (strncmp(receiveDataBuffer, str, strlen(str)) == 0)
                 {
                     char buffer[BUFFER_SIZE];
                     char buffer2[BUFFER_SIZE];
@@ -233,12 +211,12 @@ int main(int argc, char **argv)
             {
                 memset(sendDataBuffer, 0, BUFFER_SIZE);
                 snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s", REQ_USRLOC, uuid);
-                sendMessage(socketLocationServer, sendDataBuffer);
+                send_message(socketLocationServer, sendDataBuffer);
                 receiveMessage(socketLocationServer, receiveDataBuffer);
 
                 char str[20];
                 sprintf(str, "%d", RES_USRLOC);
-                if (strstr(receiveDataBuffer, str) != NULL)
+                if (strncmp(receiveDataBuffer, str, strlen(str)) == 0)
                 {
                     short int locId;
                     sscanf(receiveDataBuffer, "39 %hd", &locId);
