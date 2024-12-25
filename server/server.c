@@ -219,147 +219,163 @@ int main(int argc, char **argv)
     int count_user = 0;
     int activeConnections = 0;
 
+    fd_set master_set, read_set;
+    int fdmax;
+
+    // Limpa conjunto de descritores
+    FD_ZERO(&master_set);
+    FD_ZERO(&read_set);
+
+    // Adiciona o socket de resposta ao conjunto
+    FD_SET(socket_response, &master_set);
+    fdmax = socket_response;
+
     while (1)
     {
-        // Accept new clients
-        int acceptConnectionSocketClient = accept_socket(socket_response, client_storage);
-        activeConnections++;
-        if (activeConnections > MAX_CLIENTS)
+        // Copia o conjunto de descritores
+        read_set = master_set;
+
+        // Espera por atividade em algum dos descritores
+        int activity = select(fdmax + 1, &read_set, NULL, NULL, NULL);
+        if (activity < 0)
         {
-            printf("Client limit exceeded\n");
-            memset(sendBufferDataClient, 0, BUFFER_SIZE);
-            snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "Client limit exceeded");
-            send_message(acceptConnectionSocketClient, sendBufferDataClient);
-            close(acceptConnectionSocketClient);
-            activeConnections--;
-            continue;
+            logexit("select error\n");
         }
 
-        while (1)
+        for (int i = 0; i <= fdmax; i++)
         {
-            // Recebe mensagem do usuário
-            int receive_message_response = receive_message(acceptConnectionSocketClient, receiveBufferDataClient);
-
-            char str[20];
-            // ------------- REQ_CONN -------------
-            sprintf(str, "%d", REQ_CONN);
-            if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
+            // monitora atividade em todos os descritores
+            if (FD_ISSET(i, &read_set))
             {
-                clients[count_client].clientId = getpid();
-                short int locId;
-                sscanf(receiveBufferDataClient, "20 %hd", &locId);
-                clients[count_client].locId = locId;
-                memset(sendBufferDataClient, 0, BUFFER_SIZE);
-                snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %d", RES_CONN, clients[count_client].clientId);
-                printf("Client %d added (Loc %d)\n", clients[count_client].clientId, clients[count_client].locId);
-                count_client++;
-            }
-
-            // ------------- REQ_DISC -------------
-            sprintf(str, "%d", REQ_DISC);
-            if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
-            {
-                short int clientId;
-                sscanf(receiveBufferDataClient, "22 %hd", &clientId);
-                int findClientId = find_client(clients, clientId);
-                int oldLocId = 0;
-                if (findClientId != -1)
+                // se o descritor que tiver atividade for o socket do servidor
+                if (i == socket_response)
                 {
-                    clients[findClientId].clientId = -1;
-                    oldLocId = clients[findClientId].locId;
-                    clients[findClientId].locId = 0;
-                    printf("Client removed %hd (Loc %hd)\n", clientId, oldLocId);
-                    snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Succesful disconnect");
-                    send_message(acceptConnectionSocketClient, sendBufferDataClient);
-                    break;
-                }
-                else
-                {
-                    memset(sendBufferDataClient, 0, BUFFER_SIZE);
-                    snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "Client not found");
-                }
-            }
-
-            // ------------- REQ_USRADD -------------
-            sprintf(str, "%d", REQ_USRADD);
-            if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
-            {
-                int hasPermission;
-                char userId[BUFFER_SIZE];
-                sscanf(receiveBufferDataClient, "33 %s %d", userId, &hasPermission);
-                printf("REQ_USRADD %s %d\n", userId, hasPermission);
-                int findUserId = find_user(count_user, users, userId);
-                if (findUserId != -1)
-                {
-                    users[findUserId].hasPermission = hasPermission;
-                    memset(sendBufferDataClient, 0, BUFFER_SIZE);
-                    snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Successful update");
-                }
-                else
-                {
-                    if (count_user >= MAX_USERS)
+                    int acceptConnectionSocketClient = accept_socket(socket_response, client_storage);
+                    activeConnections++;
+                    if (activeConnections > MAX_CLIENTS)
                     {
+                        printf("Client limit exceeded\n");
                         memset(sendBufferDataClient, 0, BUFFER_SIZE);
-                        snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User limit exceeded");
+                        snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "Client limit exceeded");
+                        send_message(acceptConnectionSocketClient, sendBufferDataClient);
+                        close(acceptConnectionSocketClient);
+                        activeConnections--;
+                        continue;
                     }
-                    else
+                    FD_SET(acceptConnectionSocketClient, &master_set);
+                    if (acceptConnectionSocketClient > fdmax)
                     {
-                        users[count_user].userId = userId;
-                        users[count_user].hasPermission = hasPermission;
-                        memset(sendBufferDataClient, 0, BUFFER_SIZE);
-                        snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Successful add");
-                        count_user++;
+                        fdmax = acceptConnectionSocketClient;
                     }
                 }
-            }
-
-            // ------------- REQ_USRADD -------------
-            sprintf(str, "%d", REQ_USRLOC);
-            if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
-            {
-                char userId[BUFFER_SIZE];
-                sscanf(receiveBufferDataClient, "38 %s", userId);
-                printf("REQ_USRLOC %s\n", userId);
-                int findUserId = find_user(count_user, users, userId);
-                if(findUserId != -1){
-                    memset(sendBufferDataClient, 0, BUFFER_SIZE);
-                    snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %d", RES_USRLOC, users[findUserId].locId);
-                }
+                // se não for, é o socket do cliente
                 else
                 {
-                    memset(sendBufferDataClient, 0, BUFFER_SIZE);
-                    snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User not found");
+                    // Recebe mensagem do usuário
+                    int receive_message_response = receive_message(i, receiveBufferDataClient);
+                    char str[20];
+                    // ------------- REQ_CONN -------------
+                    sprintf(str, "%d", REQ_CONN);
+                    if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
+                    {
+                        clients[count_client].clientId = getpid();
+                        short int locId;
+                        sscanf(receiveBufferDataClient, "20 %hd", &locId);
+                        clients[count_client].locId = locId;
+                        memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                        snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %d", RES_CONN, clients[count_client].clientId);
+                        printf("Client %d added (Loc %d)\n", clients[count_client].clientId, clients[count_client].locId);
+                        count_client++;
+                    }
+
+                    // ------------- REQ_DISC -------------
+                    sprintf(str, "%d", REQ_DISC);
+                    if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
+                    {
+                        short int clientId;
+                        sscanf(receiveBufferDataClient, "22 %hd", &clientId);
+                        int findClientId = find_client(clients, clientId);
+                        int oldLocId = 0;
+                        if (findClientId != -1)
+                        {
+                            clients[findClientId].clientId = -1;
+                            oldLocId = clients[findClientId].locId;
+                            clients[findClientId].locId = 0;
+                            printf("Client removed %hd (Loc %hd)\n", clientId, oldLocId);
+                            snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Succesful disconnect");
+                            send_message(i, sendBufferDataClient);
+                            close(i);
+                            FD_CLR(i, &master_set);
+                            activeConnections--;
+                            continue;
+                        }
+                        else
+                        {
+                            memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                            snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "Client not found");
+                        }
+                    }
+
+                    // ------------- REQ_USRADD -------------
+                    sprintf(str, "%d", REQ_USRADD);
+                    if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
+                    {
+                        int hasPermission;
+                        char userId[BUFFER_SIZE];
+                        sscanf(receiveBufferDataClient, "33 %s %d", userId, &hasPermission);
+                        printf("REQ_USRADD %s %d\n", userId, hasPermission);
+                        int findUserId = find_user(count_user, users, userId);
+                        if (findUserId != -1)
+                        {
+                            users[findUserId].hasPermission = hasPermission;
+                            memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                            snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Successful update");
+                        }
+                        else
+                        {
+                            if (count_user >= MAX_USERS)
+                            {
+                                memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                                snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User limit exceeded");
+                            }
+                            else
+                            {
+                                users[count_user].userId = userId;
+                                users[count_user].hasPermission = hasPermission;
+                                memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                                snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Successful add");
+                                count_user++;
+                            }
+                        }
+                    }
+
+                    // ------------- REQ_USRADD -------------
+                    sprintf(str, "%d", REQ_USRLOC);
+                    if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
+                    {
+                        char userId[BUFFER_SIZE];
+                        sscanf(receiveBufferDataClient, "38 %s", userId);
+                        printf("REQ_USRLOC %s\n", userId);
+                        int findUserId = find_user(count_user, users, userId);
+                        if (findUserId != -1)
+                        {
+                            memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                            snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %d", RES_USRLOC, users[findUserId].locId);
+                        }
+                        else
+                        {
+                            memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                            snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User not found");
+                        }
+                    }
+
+                    // Envia mensagem para o client
+                    send_message(i, sendBufferDataClient);
                 }
             }
-
-            // Envia mensagem para o client
-            send_message(acceptConnectionSocketClient, sendBufferDataClient);
         }
-
-        close(acceptConnectionSocketClient);
     }
 
     close(socket_response);
     exit(EXIT_SUCCESS);
 }
-
-// -- client nao carrega a lista de usuarios
-// vetor de ids de usuários - char **
-// while (n conecta)
-// conecta()
-// se falhar
-// listen()
-// sleep(1)
-// array para clientes
-// struct que condensa o locId, idUser e isSpecial
-// Inicializar minhas estruturas, loc = 0 significa que nao foi preenchido
-// o cliente inicializa com sua localizacao, que é seu predio
-// se o usuário entrar naquele predio, com o comando in, significa que ele está na localização daquele client
-
-// OPCODE
-//  CHAR* PAYLOAD
-
-// MAIS PRA FRENTE
-//  - OPCODE - 1 BYTE
-//  QUANTIDADE DE CARTEIRINHAS
-// CARTEIRINHA\0CARTEIRINHA2\0CARTEIRINHA3\0
