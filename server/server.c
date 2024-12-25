@@ -18,7 +18,7 @@
 
 struct user
 {
-    char *userId;
+    char userId[10];
     short int hasPermission;
     short int locId;
 };
@@ -75,7 +75,7 @@ int open_socket(struct sockaddr_storage *storage, const char *port)
     return socket_response;
 }
 
-int find_user(int count, struct user *users, char *userId)
+int find_user(int count, struct user *users, char userId[10])
 {
     for (int i = 0; i < count; i++)
     {
@@ -278,7 +278,7 @@ int main(int argc, char **argv)
                     sprintf(str, "%d", REQ_CONN);
                     if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
                     {
-                        clients[count_client].clientId = getpid();
+                        clients[count_client].clientId = i;
                         short int locId;
                         sscanf(receiveBufferDataClient, "20 %hd", &locId);
                         clients[count_client].locId = locId;
@@ -321,7 +321,7 @@ int main(int argc, char **argv)
                     if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
                     {
                         int hasPermission;
-                        char userId[BUFFER_SIZE];
+                        char userId[10];
                         sscanf(receiveBufferDataClient, "33 %s %d", userId, &hasPermission);
                         printf("REQ_USRADD %s %d\n", userId, hasPermission);
                         int findUserId = find_user(count_user, users, userId);
@@ -340,16 +340,16 @@ int main(int argc, char **argv)
                             }
                             else
                             {
-                                users[count_user].userId = userId;
+                                strcpy(users[count_user].userId, userId);
                                 users[count_user].hasPermission = hasPermission;
+                                count_user++;
                                 memset(sendBufferDataClient, 0, BUFFER_SIZE);
                                 snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Successful add");
-                                count_user++;
                             }
                         }
                     }
 
-                    // ------------- REQ_USRADD -------------
+                    // ------------- REQ_USRLOC -------------
                     sprintf(str, "%d", REQ_USRLOC);
                     if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
                     {
