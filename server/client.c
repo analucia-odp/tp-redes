@@ -100,7 +100,8 @@ int main(int argc, char **argv)
         clientUserId = clientId;
         hasConectedUserServer = 1;
     }
-    else{
+    else
+    {
         printf("%s\n", receiveDataBuffer);
     }
     // Recebe resposta do servidor de localização
@@ -112,11 +113,13 @@ int main(int argc, char **argv)
         locationUserId = clientId;
         hasConectedUserServer = 1;
     }
-    else{
+    else
+    {
         printf("%s\n", receiveDataBuffer);
     }
 
-    if(!hasConectedUserServer && !hasConectedLocationServer){
+    if (!hasConectedUserServer && !hasConectedLocationServer)
+    {
         exit(EXIT_FAILURE);
     }
 
@@ -146,7 +149,9 @@ int main(int argc, char **argv)
             }
             else if (strstr(receiveDataBuffer, "255") != NULL)
             {
-                printf("%s\n", receiveDataBuffer);
+                char message[BUFFER_SIZE];
+                sscanf(receiveDataBuffer, "255 %[^\n]", message);
+                printf("%s\n", message);
             }
             receiveMessage(socketLocationServer, receiveDataBuffer);
             if (strstr(receiveDataBuffer, "0") != NULL)
@@ -155,7 +160,9 @@ int main(int argc, char **argv)
             }
             else if (strstr(receiveDataBuffer, "255") != NULL)
             {
-                printf("%s\n", receiveDataBuffer);
+                char message[BUFFER_SIZE];
+                sscanf(receiveDataBuffer, "255 %[^\n]", message);
+                printf("%s\n", message);
             }
             break;
         }
@@ -192,7 +199,9 @@ int main(int argc, char **argv)
                 }
                 else if (strstr(receiveDataBuffer, "255") != NULL)
                 {
-                    printf("%s\n", receiveDataBuffer);
+                    char message[BUFFER_SIZE];
+                    sscanf(receiveDataBuffer, "255 %[^\n]", message);
+                    printf("%s\n", message);
                 }
             }
             else
@@ -224,10 +233,13 @@ int main(int argc, char **argv)
                 }
                 else if (strstr(receiveDataBuffer, "255") != NULL)
                 {
-                    printf("%s\n", receiveDataBuffer);
+                    char message[BUFFER_SIZE];
+                    sscanf(receiveDataBuffer, "255 %[^\n]", message);
+                    printf("%s\n", message);
                 }
             }
-            else{
+            else
+            {
                 printf("Invalid arguments\n");
             }
         }

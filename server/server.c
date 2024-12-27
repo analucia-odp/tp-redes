@@ -150,50 +150,27 @@ int main(int argc, char **argv)
     if (passive_open_server_ok)
     {
         printf("No peer found, starting to listen...\n");
-        int active_connections_peer = 0;
-        int accept_connection_socket_peer = accept_socket(socket_response_peer, storage_peer);
-        active_connections_peer++;
-        // Verifica a quantidade máxima de conexões peer-2-peer = 1 conexão apenas
-        if (active_connections_peer > 1)
-        {
-            memset(sendBufferDataPeer, 0, BUFFER_SIZE);
-            snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %s", ERROR, "Peer limit exceeded");
-            send_message(accept_connection_socket_peer, sendBufferDataPeer);
-            close(accept_connection_socket_peer);
-            active_connections_peer--;
-        }
-        else
-        {
-            serverIds[count_server] = getpid();
-            count_server++;
-            printf("Peer %d connected\n", serverIds[count_server]);
-            memset(sendBufferDataPeer, 0, BUFFER_SIZE);
-            snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %d", RES_CONNPEER, serverIds[count_server]);
-            send_message(accept_connection_socket_peer, sendBufferDataPeer);
-            int receive_response = receive_message(accept_connection_socket_peer, receiveBufferDataPeer);
-            if (strstr(receiveBufferDataPeer, "18") != NULL)
-            {
-                int serverId;
-                sscanf(receiveBufferDataPeer, "18 %d", &serverId);
-                printf("New Peer ID: %d\n", serverId);
-            }
-        }
     }
     else
     {
-        // ---------------- Abertura ativa --------------------------------
+        // ---------------- Abertura ativa e Abertura de comunicação --------------------------------
         int connect_peer_server = active_open(socket_response_peer, &storage_peer);
+        memset(sendBufferDataPeer, 0, BUFFER_SIZE);
+        snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d", REQ_CONNPEER);
+        send_message(socket_response_peer, sendBufferDataPeer);
         int receive_response = receive_message(socket_response_peer, receiveBufferDataPeer);
-        if (strstr(receiveBufferDataPeer, "255") != NULL)
+        if (strncmp(receiveBufferDataPeer, "255", strlen("255")) == 0)
         {
-            printf("%s\n", receiveBufferDataPeer);
+            char message[BUFFER_SIZE];
+            sscanf(receiveBufferDataPeer, "255 %[^\n]", message);
+            printf("%s\n", message);
         }
-        if (strstr(receiveBufferDataPeer, "18") != NULL)
+        if (strncmp(receiveBufferDataPeer, "18", strlen("18")) == 0)
         {
             int serverId;
             sscanf(receiveBufferDataPeer, "18 %d", &serverId);
             printf("New Peer ID: %d\n", serverId);
-            serverIds[count_server] = getpid();
+            serverIds[count_server] = count_server;
             count_server++;
             printf("Peer %d connected\n", serverIds[count_server]);
             memset(sendBufferDataPeer, 0, BUFFER_SIZE);
@@ -218,6 +195,10 @@ int main(int argc, char **argv)
     int count_client = 0;
     int count_user = 0;
     int activeConnections = 0;
+    int active_connections_peer = 0;
+    int connection_socket_peer;
+
+    int server_passive_connection_id;
 
     fd_set master_set, read_set;
     int fdmax;
@@ -228,7 +209,12 @@ int main(int argc, char **argv)
 
     // Adiciona o socket de resposta ao conjunto
     FD_SET(socket_response, &master_set);
-    fdmax = socket_response;
+    FD_SET(socket_response_peer, &master_set);
+    FD_SET(STDIN_FILENO, &master_set);
+    fdmax = (socket_response > socket_response_peer) ? socket_response : socket_response_peer;
+    if (STDIN_FILENO > fdmax) {
+        fdmax = STDIN_FILENO;
+    }
 
     while (1)
     {
@@ -268,109 +254,172 @@ int main(int argc, char **argv)
                         fdmax = acceptConnectionSocketClient;
                     }
                 }
-                // se não for, é o socket do cliente
+                // se o descritor for o socket do servidor peer
+                else if (i == socket_response_peer && passive_open_server_ok)
+                {
+                    int accept_connection_socket_peer = accept_socket(socket_response_peer, storage_peer);
+                    active_connections_peer++;
+                    // Verifica a quantidade máxima de conexões peer-2-peer = 1 conexão apenas
+                    if (active_connections_peer > 1)
+                    {
+                        memset(sendBufferDataPeer, 0, BUFFER_SIZE);
+                        snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %s", ERROR, "Peer limit exceeded");
+                        send_message(accept_connection_socket_peer, sendBufferDataPeer);
+                        close(accept_connection_socket_peer);
+                        active_connections_peer--;
+                        continue;
+                    }
+                    FD_SET(accept_connection_socket_peer, &master_set);
+                    connection_socket_peer = accept_connection_socket_peer;
+                    if (accept_connection_socket_peer > fdmax)
+                    {
+                        fdmax = accept_connection_socket_peer;
+                    }
+                }
+                else if (i == STDIN_FILENO)
+                {
+                    char input[BUFFER_SIZE];
+                    if (fgets(input, sizeof(input), stdin) != NULL)
+                    {
+                        // Process the input from the terminal
+                        printf("Terminal input: %s", input);
+                        // Add your command handling logic here
+                    }
+                }
+                // se não for, é o socket do cliente ou do servidor peer
                 else
                 {
-                    // Recebe mensagem do usuário
-                    int receive_message_response = receive_message(i, receiveBufferDataClient);
                     char str[20];
-                    // ------------- REQ_CONN -------------
-                    sprintf(str, "%d", REQ_CONN);
-                    if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
-                    {
-                        clients[count_client].clientId = i;
-                        short int locId;
-                        sscanf(receiveBufferDataClient, "20 %hd", &locId);
-                        clients[count_client].locId = locId;
-                        memset(sendBufferDataClient, 0, BUFFER_SIZE);
-                        snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %d", RES_CONN, clients[count_client].clientId);
-                        printf("Client %d added (Loc %d)\n", clients[count_client].clientId, clients[count_client].locId);
-                        count_client++;
-                    }
 
-                    // ------------- REQ_DISC -------------
-                    sprintf(str, "%d", REQ_DISC);
-                    if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
+                    if (i == connection_socket_peer)
                     {
-                        short int clientId;
-                        sscanf(receiveBufferDataClient, "22 %hd", &clientId);
-                        int findClientId = find_client(clients, clientId);
-                        int oldLocId = 0;
-                        if (findClientId != -1)
+                        int receive_message_response_peer = receive_message(i, receiveBufferDataPeer);
+                        // ----------------------------- MENSAGENS DO PEER ---------------------------------------------
+                        // ------------- REQ_CONNPEER -------------
+                        sprintf(str, "%d", REQ_CONNPEER);
+                        if (strncmp(receiveBufferDataPeer, str, strlen(str)) == 0)
                         {
-                            clients[findClientId].clientId = -1;
-                            oldLocId = clients[findClientId].locId;
-                            clients[findClientId].locId = 0;
-                            printf("Client removed %hd (Loc %hd)\n", clientId, oldLocId);
-                            snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Succesful disconnect");
-                            send_message(i, sendBufferDataClient);
-                            close(i);
-                            FD_CLR(i, &master_set);
-                            activeConnections--;
-                            continue;
+
+                            serverIds[count_server] = count_server;
+                            count_server++;
+                            printf("Peer %d connected\n", serverIds[count_server]);
+                            memset(sendBufferDataPeer, 0, BUFFER_SIZE);
+                            snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %d", RES_CONNPEER, serverIds[count_server]);
+                            // Envia mensagem para o peer
+                            send_message(i, sendBufferDataPeer);
                         }
-                        else
+
+                        // ------------- RES_CONNPEER -------------
+                        sprintf(str, "%d", RES_CONNPEER);
+                        if (strncmp(receiveBufferDataPeer, str, strlen(str)) == 0)
                         {
-                            memset(sendBufferDataClient, 0, BUFFER_SIZE);
-                            snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "Client not found");
+                            sscanf(receiveBufferDataPeer, "18 %d", &server_passive_connection_id);
+                            printf("New Peer ID: %d\n", server_passive_connection_id);
                         }
                     }
 
-                    // ------------- REQ_USRADD -------------
-                    sprintf(str, "%d", REQ_USRADD);
-                    if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
+                    else
                     {
-                        int hasPermission;
-                        char userId[10];
-                        sscanf(receiveBufferDataClient, "33 %s %d", userId, &hasPermission);
-                        printf("REQ_USRADD %s %d\n", userId, hasPermission);
-                        int findUserId = find_user(count_user, users, userId);
-                        if (findUserId != -1)
+                        int receive_message_response = receive_message(i, receiveBufferDataClient);
+                        // ----------------------------- MENSAGENS DE CLIENTES ---------------------------------------------
+                        // ------------- REQ_CONN -------------
+                        sprintf(str, "%d", REQ_CONN);
+                        if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
                         {
-                            users[findUserId].hasPermission = hasPermission;
+                            clients[count_client].clientId = count_client;
+                            short int locId;
+                            sscanf(receiveBufferDataClient, "20 %hd", &locId);
+                            clients[count_client].locId = locId;
                             memset(sendBufferDataClient, 0, BUFFER_SIZE);
-                            snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Successful update");
+                            snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %d", RES_CONN, clients[count_client].clientId);
+                            printf("Client %d added (Loc %d)\n", clients[count_client].clientId, clients[count_client].locId);
+                            count_client++;
                         }
-                        else
+
+                        // ------------- REQ_DISC -------------
+                        sprintf(str, "%d", REQ_DISC);
+                        if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
                         {
-                            if (count_user >= MAX_USERS)
+                            short int clientId;
+                            sscanf(receiveBufferDataClient, "22 %hd", &clientId);
+                            int findClientId = find_client(clients, clientId);
+                            int oldLocId = 0;
+                            if (findClientId != -1)
                             {
-                                memset(sendBufferDataClient, 0, BUFFER_SIZE);
-                                snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User limit exceeded");
+                                clients[findClientId].clientId = -1;
+                                oldLocId = clients[findClientId].locId;
+                                clients[findClientId].locId = 0;
+                                printf("Client removed %hd (Loc %hd)\n", clientId, oldLocId);
+                                snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Succesful disconnect");
+                                send_message(i, sendBufferDataClient);
+                                close(i);
+                                FD_CLR(i, &master_set);
+                                activeConnections--;
+                                continue;
                             }
                             else
                             {
-                                strcpy(users[count_user].userId, userId);
-                                users[count_user].hasPermission = hasPermission;
-                                count_user++;
                                 memset(sendBufferDataClient, 0, BUFFER_SIZE);
-                                snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Successful add");
+                                snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "Client not found");
                             }
                         }
-                    }
 
-                    // ------------- REQ_USRLOC -------------
-                    sprintf(str, "%d", REQ_USRLOC);
-                    if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
-                    {
-                        char userId[BUFFER_SIZE];
-                        sscanf(receiveBufferDataClient, "38 %s", userId);
-                        printf("REQ_USRLOC %s\n", userId);
-                        int findUserId = find_user(count_user, users, userId);
-                        if (findUserId != -1)
+                        // ------------- REQ_USRADD -------------
+                        sprintf(str, "%d", REQ_USRADD);
+                        if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
                         {
-                            memset(sendBufferDataClient, 0, BUFFER_SIZE);
-                            snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %d", RES_USRLOC, users[findUserId].locId);
+                            int hasPermission;
+                            char userId[10];
+                            sscanf(receiveBufferDataClient, "33 %s %d", userId, &hasPermission);
+                            printf("REQ_USRADD %s %d\n", userId, hasPermission);
+                            int findUserId = find_user(count_user, users, userId);
+                            if (findUserId != -1)
+                            {
+                                users[findUserId].hasPermission = hasPermission;
+                                memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                                snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Successful update");
+                            }
+                            else
+                            {
+                                if (count_user >= MAX_USERS)
+                                {
+                                    memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                                    snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User limit exceeded");
+                                }
+                                else
+                                {
+                                    strcpy(users[count_user].userId, userId);
+                                    users[count_user].hasPermission = hasPermission;
+                                    count_user++;
+                                    memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                                    snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Successful add");
+                                }
+                            }
                         }
-                        else
-                        {
-                            memset(sendBufferDataClient, 0, BUFFER_SIZE);
-                            snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User not found");
-                        }
-                    }
 
-                    // Envia mensagem para o client
-                    send_message(i, sendBufferDataClient);
+                        // ------------- REQ_USRLOC -------------
+                        sprintf(str, "%d", REQ_USRLOC);
+                        if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
+                        {
+                            char userId[BUFFER_SIZE];
+                            sscanf(receiveBufferDataClient, "38 %s", userId);
+                            printf("REQ_USRLOC %s\n", userId);
+                            int findUserId = find_user(count_user, users, userId);
+                            if (findUserId != -1)
+                            {
+                                memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                                snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %d", RES_USRLOC, users[findUserId].locId);
+                            }
+                            else
+                            {
+                                memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                                snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User not found");
+                            }
+                        }
+
+                        // Envia mensagem para o client
+                        send_message(i, sendBufferDataClient);
+                    }
                 }
             }
         }
