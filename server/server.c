@@ -396,7 +396,7 @@ int main(int argc, char **argv)
                             int locId;
                             int oldLocId;
                             sscanf(receiveBufferDataPeer, "36 %10s %d", userId, &locId);
-                            printf("REQ_LOCREG %s %d\n", userId, locId);
+                            printf("< REQ_LOCREG %s %d\n", userId, locId);
                             int findUserId = find_user(count_user, users, userId);
                             if (findUserId != -1)
                             {
@@ -469,13 +469,14 @@ int main(int argc, char **argv)
                             int hasPermission;
                             char userId[11] = {0};
                             sscanf(receiveBufferDataClient, "33 %10s %d", userId, &hasPermission);
-                            printf("REQ_USRADD %s %d\n", userId, hasPermission);
+                            printf("< REQ_USRADD %s %d\n", userId, hasPermission);
                             int findUserId = find_user(count_user, users, userId);
                             if (findUserId != -1)
                             {
                                 users[findUserId].hasPermission = hasPermission;
                                 memset(sendBufferDataClient, 0, BUFFER_SIZE);
                                 snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Successful update");
+                                printf("> OK 3\n");
                             }
                             else
                             {
@@ -483,6 +484,7 @@ int main(int argc, char **argv)
                                 {
                                     memset(sendBufferDataClient, 0, BUFFER_SIZE);
                                     snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User limit exceeded");
+                                    printf("> ERROR 17\n");
                                 }
                                 else
                                 {
@@ -491,6 +493,7 @@ int main(int argc, char **argv)
                                     count_user++;
                                     memset(sendBufferDataClient, 0, BUFFER_SIZE);
                                     snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", OK, "Successful add");
+                                    printf("> OK 2\n");
                                 }
                             }
                         }
@@ -501,17 +504,19 @@ int main(int argc, char **argv)
                         {
                             char userId[11] = {0};
                             sscanf(receiveBufferDataClient, "38 %10s", userId);
-                            printf("REQ_USRLOC %s\n", userId);
+                            printf("< REQ_USRLOC %s\n", userId);
                             int findUserId = find_user(count_user, users, userId);
                             if (findUserId != -1)
                             {
                                 memset(sendBufferDataClient, 0, BUFFER_SIZE);
                                 snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %d", RES_USRLOC, users[findUserId].locId);
+                                printf("> RES_USRLOC %d\n", users[findUserId].locId);
                             }
                             else
                             {
                                 memset(sendBufferDataClient, 0, BUFFER_SIZE);
                                 snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User not found");
+                                printf("> ERROR 18\n");
                             }
                         }
 
@@ -522,7 +527,7 @@ int main(int argc, char **argv)
                             char userId[11] = {0};
                             char direction[4] = {0};
                             sscanf(receiveBufferDataClient, "34 %10s %s", userId, direction);
-                            printf("REQ_USRACCESS %s %s\n", userId, direction);
+                            printf("< REQ_USRACCESS %s %s\n", userId, direction);
                             int findUserId = find_user(count_user, users, userId);
                             if (findUserId != -1)
                             {
@@ -551,12 +556,14 @@ int main(int argc, char **argv)
                                     sscanf(receiveBufferDataPeer, "37 %d", &oldLocId);
                                     memset(sendBufferDataClient, 0, BUFFER_SIZE);
                                     snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %d", RES_USRACCESS, oldLocId);
+                                    printf("> RES_LOCREG %d\n", oldLocId);
                                 }
                             }
                             else
                             {
                                 memset(sendBufferDataClient, 0, BUFFER_SIZE);
                                 snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User not found");
+                                printf("> ERROR 18\n");
                             }
                         }
                         // Envia mensagem para o client
