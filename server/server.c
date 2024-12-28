@@ -18,7 +18,7 @@
 
 struct user
 {
-    char userId[10];
+    char userId[11];
     short int hasPermission;
     short int locId;
 };
@@ -27,6 +27,7 @@ struct client
 {
     short int clientId;
     short int locId;
+    int socket;
 };
 
 void init_setsockopt_ipv6(int socket_response)
@@ -75,10 +76,12 @@ int open_socket(struct sockaddr_storage *storage, const char *port)
     return socket_response;
 }
 
-int find_user(int count, struct user *users, char userId[10])
+int find_user(int count, struct user *users, const char *userId)
 {
+    // printf("Count total: %d\n", count);
     for (int i = 0; i < count; i++)
     {
+        // printf("user {%d}: %s\n", count, users[i].userId);
         if (strcmp(users[i].userId, userId) == 0)
         {
             return i;
@@ -92,6 +95,19 @@ int find_client(struct client *clients, short int clientId)
     for (int i = 0; i < BUFFER_SIZE; i++)
     {
         if (clients[i].clientId == clientId)
+        {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+int find_client_by_socket(struct client *clients, int socket)
+{
+    for (int i = 0; i < BUFFER_SIZE; i++)
+    {
+        if (clients[i].socket == socket)
         {
             return i;
         }
@@ -146,6 +162,7 @@ int main(int argc, char **argv)
     int passive_open_server_ok = passive_open(socket_response_peer, storage_peer);
     int serverIds[BUFFER_SIZE];
     int count_server = 0;
+    int server_active_connection_id;
 
     if (passive_open_server_ok)
     {
@@ -167,9 +184,8 @@ int main(int argc, char **argv)
         }
         if (strncmp(receiveBufferDataPeer, "18", strlen("18")) == 0)
         {
-            int serverId;
-            sscanf(receiveBufferDataPeer, "18 %d", &serverId);
-            printf("New Peer ID: %d\n", serverId);
+            sscanf(receiveBufferDataPeer, "18 %d", &server_active_connection_id);
+            printf("New Peer ID: %d\n", server_active_connection_id);
             serverIds[count_server] = count_server;
             count_server++;
             printf("Peer %d connected\n", serverIds[count_server]);
@@ -187,7 +203,7 @@ int main(int argc, char **argv)
     for (int i = 0; i < BUFFER_SIZE; i++)
     {
         users[i].hasPermission = 0;
-        users[i].locId = 0;
+        users[i].locId = -1;
     }
     struct client clients[BUFFER_SIZE];
 
@@ -212,7 +228,8 @@ int main(int argc, char **argv)
     FD_SET(socket_response_peer, &master_set);
     FD_SET(STDIN_FILENO, &master_set);
     fdmax = (socket_response > socket_response_peer) ? socket_response : socket_response_peer;
-    if (STDIN_FILENO > fdmax) {
+    if (STDIN_FILENO > fdmax)
+    {
         fdmax = STDIN_FILENO;
     }
 
@@ -254,7 +271,7 @@ int main(int argc, char **argv)
                         fdmax = acceptConnectionSocketClient;
                     }
                 }
-                // se o descritor for o socket do servidor peer
+                // se o descritor for o socket do servidor peer - SU
                 else if (i == socket_response_peer && passive_open_server_ok)
                 {
                     int accept_connection_socket_peer = accept_socket(socket_response_peer, storage_peer);
@@ -276,14 +293,36 @@ int main(int argc, char **argv)
                         fdmax = accept_connection_socket_peer;
                     }
                 }
-                else if (i == STDIN_FILENO)
+                else if (i == STDIN_FILENO && !passive_open_server_ok)
                 {
                     char input[BUFFER_SIZE];
                     if (fgets(input, sizeof(input), stdin) != NULL)
                     {
-                        // Process the input from the terminal
-                        printf("Terminal input: %s", input);
-                        // Add your command handling logic here
+                        // Fechamento de Conexão
+                        if (strcmp(input, "kill\n") == 0)
+                        {
+                            // SEND REQ_DISCPEER
+                            memset(sendBufferDataPeer, 0, BUFFER_SIZE);
+                            snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %d", REQ_DISCPEER, server_active_connection_id);
+                            send_message(socket_response_peer, sendBufferDataPeer);
+
+                            // RCV REQ_DISCPEER
+                            receive_message(socket_response_peer, receiveBufferDataPeer);
+                            if (strncmp(receiveBufferDataPeer, "255", strlen("255")) == 0)
+                            {
+                                char message[BUFFER_SIZE];
+                                sscanf(receiveBufferDataPeer, "255 %[^\n]", message);
+                                printf("%s\n", message);
+                            }
+                            else if (strncmp(receiveBufferDataPeer, "0", strlen("0")) == 0)
+                            {
+                                printf("Successful disconnect\n");
+                                printf("Peer %d disconnected\n", serverIds[count_server]);
+                                serverIds[count_server] = -1;
+                                close(socket_response_peer);
+                                exit(EXIT_SUCCESS);
+                            }
+                        }
                     }
                 }
                 // se não for, é o socket do cliente ou do servidor peer
@@ -291,7 +330,7 @@ int main(int argc, char **argv)
                 {
                     char str[20];
 
-                    if (i == connection_socket_peer)
+                    if (passive_open_server_ok && i == connection_socket_peer) // SU
                     {
                         int receive_message_response_peer = receive_message(i, receiveBufferDataPeer);
                         // ----------------------------- MENSAGENS DO PEER ---------------------------------------------
@@ -316,8 +355,64 @@ int main(int argc, char **argv)
                             sscanf(receiveBufferDataPeer, "18 %d", &server_passive_connection_id);
                             printf("New Peer ID: %d\n", server_passive_connection_id);
                         }
-                    }
 
+                        // ------------- REQ_DISCPEER -------------
+                        sprintf(str, "%d", REQ_DISCPEER);
+                        if (strncmp(receiveBufferDataPeer, str, strlen(str)) == 0)
+                        {
+                            int peerId;
+                            sscanf(receiveBufferDataPeer, "19 %d", &peerId);
+                            if (peerId == serverIds[count_server])
+                            {
+                                memset(sendBufferDataPeer, 0, BUFFER_SIZE);
+                                snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %s", OK, "Successful disconnect");
+                                printf("Peer %d disconnected\n", serverIds[count_server]);
+                                send_message(i, sendBufferDataPeer);
+                                close(i);
+                                FD_CLR(i, &master_set);
+                                active_connections_peer--;
+                                printf("No peer found, starting to listen...\n");
+                                continue;
+                            }
+                            else
+                            {
+                                memset(sendBufferDataPeer, 0, BUFFER_SIZE);
+                                snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %s", ERROR, "Peer not found");
+                            }
+
+                            send_message(i, sendBufferDataPeer);
+                        }
+                    }
+                    else if (!passive_open_server_ok && i == socket_response_peer)
+                    { // SL
+                        int receive_message_response_peer = receive_message(i, receiveBufferDataPeer);
+                        // ------------- REQ_LOCREG -------------
+                        sprintf(str, "%d", REQ_LOCREG);
+                        if (strncmp(receiveBufferDataPeer, str, strlen(str)) == 0)
+                        {
+                            char userId[11] = {0};
+                            int locId;
+                            int oldLocId;
+                            sscanf(receiveBufferDataPeer, "36 %10s %d", userId, &locId);
+                            printf("REQ_LOCREG %s %d\n", userId, locId);
+                            int findUserId = find_user(count_user, users, userId);
+                            if (findUserId != -1)
+                            {
+                                oldLocId = users[findUserId].locId;
+                                users[findUserId].locId = locId;
+                            }
+                            else
+                            {
+                                strcpy(users[count_user].userId, userId);
+                                oldLocId = -1;
+                                users[count_user].locId = locId;
+                                count_user++;
+                            }
+                            memset(sendBufferDataPeer, 0, BUFFER_SIZE);
+                            snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %d", RES_LOCREG, oldLocId);
+                        }
+                        send_message(i, sendBufferDataPeer);
+                    }
                     else
                     {
                         int receive_message_response = receive_message(i, receiveBufferDataClient);
@@ -327,6 +422,7 @@ int main(int argc, char **argv)
                         if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
                         {
                             clients[count_client].clientId = count_client;
+                            clients[count_client].socket = i;
                             short int locId;
                             sscanf(receiveBufferDataClient, "20 %hd", &locId);
                             clients[count_client].locId = locId;
@@ -369,8 +465,8 @@ int main(int argc, char **argv)
                         if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
                         {
                             int hasPermission;
-                            char userId[10];
-                            sscanf(receiveBufferDataClient, "33 %s %d", userId, &hasPermission);
+                            char userId[11] = {0};
+                            sscanf(receiveBufferDataClient, "33 %10s %d", userId, &hasPermission);
                             printf("REQ_USRADD %s %d\n", userId, hasPermission);
                             int findUserId = find_user(count_user, users, userId);
                             if (findUserId != -1)
@@ -401,8 +497,8 @@ int main(int argc, char **argv)
                         sprintf(str, "%d", REQ_USRLOC);
                         if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
                         {
-                            char userId[BUFFER_SIZE];
-                            sscanf(receiveBufferDataClient, "38 %s", userId);
+                            char userId[11] = {0};
+                            sscanf(receiveBufferDataClient, "38 %10s", userId);
                             printf("REQ_USRLOC %s\n", userId);
                             int findUserId = find_user(count_user, users, userId);
                             if (findUserId != -1)
@@ -417,6 +513,49 @@ int main(int argc, char **argv)
                             }
                         }
 
+                        // ------------- REQ_USRACCESS -------------
+                        sprintf(str, "%d", REQ_USRACCESS);
+                        if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
+                        {
+                            char userId[11] = {0};
+                            char direction[4] = {0};
+                            sscanf(receiveBufferDataClient, "34 %10s %s", userId, direction);
+                            printf("REQ_USRACCESS %s %s\n", userId, direction);
+                            int findUserId = find_user(count_user, users, userId);
+                            if (findUserId != -1)
+                            {
+                                int loc;
+                                if (strcmp(direction, "in") == 0)
+                                {
+                                    int clientId = find_client_by_socket(clients, i);
+                                    if (clientId != -1)
+                                    {
+                                        loc = clients[clientId].locId;
+                                    }
+                                }
+                                else
+                                {
+                                    loc = -1;
+                                }
+                                memset(sendBufferDataPeer, 0, BUFFER_SIZE);
+                                snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %s %d", REQ_LOCREG, userId, loc);
+                                send_message(connection_socket_peer, sendBufferDataPeer);
+                                receive_message(connection_socket_peer, receiveBufferDataPeer);
+
+                                sprintf(str, "%d", RES_LOCREG);
+                                if(strncmp(receiveBufferDataPeer, str, strlen(str)) == 0){
+                                    int oldLocId;
+                                    sscanf(receiveBufferDataPeer, "37 %d", &oldLocId);
+                                    memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                                    snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %d", RES_USRACCESS, oldLocId);
+                                }
+                            }
+                            else
+                            {
+                                memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                                snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User not found");
+                            }
+                        }
                         // Envia mensagem para o client
                         send_message(i, sendBufferDataClient);
                     }

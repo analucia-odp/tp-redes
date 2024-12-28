@@ -170,9 +170,9 @@ int main(int argc, char **argv)
         // Adiciona usuário
         else if (strstr(sendDataBuffer, "add") != NULL)
         {
-            char uuid[10];
+            char uuid[11] = {0};
             int isEspecial;
-            sscanf(sendDataBuffer, "add %s %d", uuid, &isEspecial);
+            sscanf(sendDataBuffer, "add %10s %d", uuid, &isEspecial);
             bool hasValidAdd = strlen(uuid) == 10 && (isEspecial == 0 || isEspecial == 1);
             if (hasValidAdd)
             {
@@ -214,8 +214,8 @@ int main(int argc, char **argv)
         else if (strstr(sendDataBuffer, "find") != NULL)
         {
             char buffer[BUFFER_SIZE];
-            char uuid[10];
-            sscanf(sendDataBuffer, "find %s", uuid);
+            char uuid[11];
+            sscanf(sendDataBuffer, "find %10s", uuid);
             if (strlen(uuid) == 10)
             {
                 memset(sendDataBuffer, 0, BUFFER_SIZE);
@@ -241,6 +241,32 @@ int main(int argc, char **argv)
             else
             {
                 printf("Invalid arguments\n");
+            }
+        }
+        // Solicita entrada e saída de pessoa
+        else if (strncmp(sendDataBuffer, "in", strlen("in")) == 0 || strncmp(sendDataBuffer, "out", strlen("out")) == 0)
+        {
+            char uuid[11] = {0};
+            char direction[4] = {0};
+            sscanf(sendDataBuffer, "%s %10s", direction, uuid);
+            memset(sendDataBuffer, 0, BUFFER_SIZE);
+            snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s %s", REQ_USRACCESS, uuid, direction);
+            send_message(socketUserServer, sendDataBuffer); // Envia apenas para o servidor de usuário
+            receiveMessage(socketUserServer, receiveDataBuffer);
+
+            char str[20];
+            sprintf(str, "%d",  RES_USRACCESS);
+            if (strncmp(receiveDataBuffer, str, strlen(str)) == 0)
+            {
+                short int locId;
+                sscanf(receiveDataBuffer, "35 %hd", &locId);
+                printf("Ok. Last location: %d\n", locId);
+            }
+            else if (strstr(receiveDataBuffer, "255") != NULL)
+            {
+                char message[BUFFER_SIZE];
+                sscanf(receiveDataBuffer, "255 %[^\n]", message);
+                printf("%s\n", message);
             }
         }
 
