@@ -160,7 +160,7 @@ int main(int argc, char **argv)
     char sendBufferDataPeer[BUFFER_SIZE];
     char receiveBufferDataPeer[BUFFER_SIZE];
     int passive_open_server_ok = passive_open(socket_response_peer, storage_peer);
-    int serverIds[BUFFER_SIZE];
+    int server_peer_id;
     int count_server = 0;
     int server_active_connection_id;
 
@@ -184,13 +184,15 @@ int main(int argc, char **argv)
         }
         if (strncmp(receiveBufferDataPeer, "18", strlen("18")) == 0)
         {
+            // Pego meu Identificador
             sscanf(receiveBufferDataPeer, "18 %d", &server_active_connection_id);
             printf("New Peer ID: %d\n", server_active_connection_id);
-            serverIds[count_server] = count_server;
+            // Gero um identificador para meu outro servidor
+            server_peer_id = count_server;
             count_server++;
-            printf("Peer %d connected\n", serverIds[count_server]);
+            printf("Peer %d connected\n", server_peer_id);
             memset(sendBufferDataPeer, 0, BUFFER_SIZE);
-            snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %d", RES_CONNPEER, serverIds[count_server]);
+            snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %d", RES_CONNPEER, server_peer_id);
             send_message(socket_response_peer, sendBufferDataPeer);
         }
     }
@@ -293,7 +295,7 @@ int main(int argc, char **argv)
                         fdmax = accept_connection_socket_peer;
                     }
                 }
-                else if (i == STDIN_FILENO && !passive_open_server_ok)
+                else if (i == STDIN_FILENO)
                 {
                     char input[BUFFER_SIZE];
                     if (fgets(input, sizeof(input), stdin) != NULL)
@@ -317,8 +319,8 @@ int main(int argc, char **argv)
                             else if (strncmp(receiveBufferDataPeer, "0", strlen("0")) == 0)
                             {
                                 printf("Successful disconnect\n");
-                                printf("Peer %d disconnected\n", serverIds[count_server]);
-                                serverIds[count_server] = -1;
+                                printf("Peer %d disconnected\n", server_peer_id);
+                                server_peer_id = -1;
                                 close(socket_response_peer);
                                 exit(EXIT_SUCCESS);
                             }
@@ -339,11 +341,11 @@ int main(int argc, char **argv)
                         if (strncmp(receiveBufferDataPeer, str, strlen(str)) == 0)
                         {
 
-                            serverIds[count_server] = count_server;
-                            count_server++;
-                            printf("Peer %d connected\n", serverIds[count_server]);
+                            server_peer_id = count_server;
+                            printf("Peer %d connected\n", server_peer_id);
                             memset(sendBufferDataPeer, 0, BUFFER_SIZE);
-                            snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %d", RES_CONNPEER, serverIds[count_server]);
+                            snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %d", RES_CONNPEER, server_peer_id);
+                            count_server++;
                             // Envia mensagem para o peer
                             send_message(i, sendBufferDataPeer);
                         }
@@ -362,11 +364,11 @@ int main(int argc, char **argv)
                         {
                             int peerId;
                             sscanf(receiveBufferDataPeer, "19 %d", &peerId);
-                            if (peerId == serverIds[count_server])
+                            if (peerId == server_peer_id)
                             {
                                 memset(sendBufferDataPeer, 0, BUFFER_SIZE);
                                 snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %s", OK, "Successful disconnect");
-                                printf("Peer %d disconnected\n", serverIds[count_server]);
+                                printf("Peer %d disconnected\n", server_peer_id);
                                 send_message(i, sendBufferDataPeer);
                                 close(i);
                                 FD_CLR(i, &master_set);
@@ -543,7 +545,8 @@ int main(int argc, char **argv)
                                 receive_message(connection_socket_peer, receiveBufferDataPeer);
 
                                 sprintf(str, "%d", RES_LOCREG);
-                                if(strncmp(receiveBufferDataPeer, str, strlen(str)) == 0){
+                                if (strncmp(receiveBufferDataPeer, str, strlen(str)) == 0)
+                                {
                                     int oldLocId;
                                     sscanf(receiveBufferDataPeer, "37 %d", &oldLocId);
                                     memset(sendBufferDataClient, 0, BUFFER_SIZE);
