@@ -204,6 +204,7 @@ int main(int argc, char **argv)
     struct user users[BUFFER_SIZE];
     for (int i = 0; i < BUFFER_SIZE; i++)
     {
+        strncpy(users[i].userId, "", 11);
         users[i].hasPermission = 0;
         users[i].locId = -1;
     }
@@ -380,6 +381,33 @@ int main(int argc, char **argv)
                             {
                                 memset(sendBufferDataPeer, 0, BUFFER_SIZE);
                                 snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %s", ERROR, "Peer not found");
+                            }
+
+                            send_message(i, sendBufferDataPeer);
+                        }
+                        // ------------- REQ_USRAUTH -------------
+                        sprintf(str, "%d", REQ_USRAUTH);
+                        if (strncmp(receiveBufferDataPeer, str, strlen(str)) == 0)
+                        {
+                            char userId[11] = {0};
+                            sscanf(receiveBufferDataPeer, "42 %10s", userId);
+                            printf("< REQ_USRAUTH %s\n", userId);
+                            int findUserId = find_user(count_user, users, userId);
+                            memset(sendBufferDataPeer, 0, BUFFER_SIZE);
+                            if (findUserId != -1)
+                            {
+                                if (users[findUserId].hasPermission)
+                                {
+                                    snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d 1", RES_USRAUTH);
+                                }
+                                else
+                                {
+                                    snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d 0", RES_USRAUTH);
+                                }
+                            }
+                            else
+                            {
+                                snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d -1", RES_USRAUTH);
                             }
 
                             send_message(i, sendBufferDataPeer);
@@ -564,6 +592,75 @@ int main(int argc, char **argv)
                                 memset(sendBufferDataClient, 0, BUFFER_SIZE);
                                 snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User not found");
                                 printf("> ERROR 18\n");
+                            }
+                        }
+                        // ------------- REQ_LOCLIST -------------
+                        sprintf(str, "%d", REQ_LOCLIST);
+                        if (strncmp(receiveBufferDataClient, str, strlen(str)) == 0)
+                        {
+                            char userId[11] = {0};
+                            int locId;
+                            sscanf(receiveBufferDataClient, "40 %10s %d", userId, &locId);
+                            printf("< REQ_LOCLIST %s %d\n", userId, locId);
+                            memset(sendBufferDataPeer, 0, BUFFER_SIZE);
+                            snprintf(sendBufferDataPeer, BUFFER_SIZE, "%d %s", REQ_USRAUTH, userId);
+                            send_message(socket_response_peer, sendBufferDataPeer);
+                            receive_message(socket_response_peer, receiveBufferDataPeer);
+
+                            sprintf(str, "%d", RES_USRAUTH);
+                            if (strncmp(receiveBufferDataPeer, str, strlen(str)) == 0)
+                            {
+                                int permission;
+                                sscanf(receiveBufferDataPeer, "43 %d", &permission);
+                                printf("< RES_USRAUTH %d\n", permission);
+                                if (permission == 1)
+                                {
+                                    char listIdsLocation[MAX_USERS][11];
+                                    int countIdsLocation = 0;
+                                    for (int i = 0; i < count_user; i++)
+                                    {
+                                        if (strlen(users[i].userId) > 0 && users[i].locId == locId)
+                                        {
+                                            strncpy(listIdsLocation[countIdsLocation], users[i].userId, 11);
+                                            countIdsLocation++;
+                                        }
+                                    }
+
+                                    memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                                    char idsBuffer[BUFFER_SIZE] = {0}; // Buffer auxiliar para os IDs
+                                    int remainingSize = BUFFER_SIZE - 1;
+                                    for (int i = 0; i < countIdsLocation; i++)
+                                    {
+                                        int len = strlen(listIdsLocation[i]);
+                                        if (len + 1 > remainingSize)
+                                            break;
+                                        strncat(idsBuffer, listIdsLocation[i], remainingSize);
+                                        remainingSize -= len;
+                                        if (i < countIdsLocation - 1)
+                                        { // Adicionar espaço entre os IDs, mas não no último
+                                            if (1 > remainingSize)
+                                            { // Verifica espaço para o espaço adicional
+                                                break;
+                                            }
+                                            strncat(idsBuffer, ", ", remainingSize);
+                                            remainingSize -= 1;
+                                        }
+                                    }
+                                    snprintf(sendBufferDataClient, BUFFER_SIZE + 4, "%d %s", RES_LOCLIST, idsBuffer);
+                                    printf("> RES_LOCLIST %s\n", idsBuffer);
+                                }
+                                else if (permission == 0)
+                                {
+                                    memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                                    snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "Permission denied");
+                                    printf("> ERROR 19\n");
+                                }
+                                else
+                                {
+                                    memset(sendBufferDataClient, 0, BUFFER_SIZE);
+                                    snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User not found");
+                                    printf("> ERROR 18\n");
+                                }
                             }
                         }
                         // Envia mensagem para o client

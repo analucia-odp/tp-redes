@@ -243,8 +243,34 @@ int main(int argc, char **argv)
                 printf("Invalid arguments\n");
             }
         }
+        // Solicita lista de pessoas presentes em uma determinada localização
+        else if (strncmp(sendDataBuffer, "inspect", strlen("inspect")) == 0)
+        {
+            char uuid[11] = {0};
+            int locId;
+            sscanf(sendDataBuffer, "inspect %10s %d", uuid, &locId);
+            memset(sendDataBuffer, 0, BUFFER_SIZE);
+            snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s %d", REQ_LOCLIST, uuid, locId);
+            send_message(socketLocationServer, sendDataBuffer); // Envia apenas para o servidor de ulocalização
+            receiveMessage(socketLocationServer, receiveDataBuffer);
+
+            char str[20];
+            sprintf(str, "%d", RES_LOCLIST);
+            if (strncmp(receiveDataBuffer, str, strlen(str)) == 0)
+            {
+                char idsBuffer[BUFFER_SIZE] = {0};
+                sscanf(receiveDataBuffer, "41 %[^\n]", idsBuffer);
+                printf("List of people at the specified location: %s\n", idsBuffer);
+            }
+            else if (strstr(receiveDataBuffer, "255") != NULL)
+            {
+                char message[BUFFER_SIZE];
+                sscanf(receiveDataBuffer, "255 %[^\n]", message);
+                printf("%s\n", message);
+            }
+        }
         // Solicita entrada e saída de pessoa
-        else if (strncmp(sendDataBuffer, "in", strlen("in")) == 0 || strncmp(sendDataBuffer, "out", strlen("out")) == 0)
+        else if (strstr(sendDataBuffer, "in") != NULL || strstr(sendDataBuffer, "out") != NULL)
         {
             char uuid[11] = {0};
             char direction[4] = {0};
@@ -255,7 +281,7 @@ int main(int argc, char **argv)
             receiveMessage(socketUserServer, receiveDataBuffer);
 
             char str[20];
-            sprintf(str, "%d",  RES_USRACCESS);
+            sprintf(str, "%d", RES_USRACCESS);
             if (strncmp(receiveDataBuffer, str, strlen(str)) == 0)
             {
                 short int locId;
@@ -269,7 +295,6 @@ int main(int argc, char **argv)
                 printf("%s\n", message);
             }
         }
-
         else
         {
             printf("Invalid command\n");
