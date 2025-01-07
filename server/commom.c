@@ -37,7 +37,6 @@ int addrparse(const char *addrstr, const char *portstr, struct sockaddr_storage 
         struct sockaddr_in6 *addr6 = (struct sockaddr_in6 *)storage; // transformei o ponteiro para apontar para um storage
         addr6->sin6_family = AF_INET6;
         addr6->sin6_port = port;
-        // addr6->sin6_addr = inaddr6; //isso é um arranjo de 16 bytes
         memcpy(&(addr6->sin6_addr), &inaddr6, sizeof(inaddr6));
         return 0;
     }

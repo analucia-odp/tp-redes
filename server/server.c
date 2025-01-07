@@ -12,7 +12,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#define BUFFER_SIZE 1024
 #define MAX_USERS 30
 #define MAX_CLIENTS 10
 
@@ -78,10 +77,8 @@ int open_socket(struct sockaddr_storage *storage, const char *port)
 
 int find_user(int count, struct user *users, const char *userId)
 {
-    // printf("Count total: %d\n", count);
     for (int i = 0; i < count; i++)
     {
-        // printf("user {%d}: %s\n", count, users[i].userId);
         if (strcmp(users[i].userId, userId) == 0)
         {
             return i;
@@ -115,12 +112,6 @@ int find_client_by_socket(struct client *clients, int socket)
 
     return -1;
 }
-
-void convertToString(char *str, int message)
-{
-    sprintf(str, "%d", message);
-}
-
 void log_error_message_invalid_arguments(int argc, char **argv)
 {
     printf("Invalid arguments!\n");
@@ -130,15 +121,38 @@ void log_error_message_invalid_arguments(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
+    // socket
     int bind_response;
     int listen_response;
     int accept_connection_socket;
+    int connection_socket_peer;
 
-    char addrstr[BUFFER_SIZE];
+    // Buffers de dados
+    char sendBufferDataClient[BUFFER_SIZE];
+    char receiveBufferDataClient[BUFFER_SIZE];
+    char sendBufferDataPeer[BUFFER_SIZE];
+    char receiveBufferDataPeer[BUFFER_SIZE];
 
+    // id conexão
+    int server_peer_id;
+    int server_active_connection_id;
+    int server_passive_connection_id;
+
+    // counts
+    int count_server = 0;
+    int count_client = 0;
+    int count_user = 0;
+    int active_connections = 0;
+    int active_connections_peer = 0;
+
+    // sockaddr
     struct sockaddr_storage client_storage;
     struct sockaddr_storage storage;
     struct sockaddr_storage storage_peer;
+
+    // descritores
+    fd_set master_set, read_set;
+    int fdmax;
 
     // Configurações iniciais
     if (argc < 3)
@@ -157,12 +171,7 @@ int main(int argc, char **argv)
     int passive_open_clients_ok = passive_open(socket_response, storage);
 
     // --------------- Abertura Passiva para servidores ------------
-    char sendBufferDataPeer[BUFFER_SIZE];
-    char receiveBufferDataPeer[BUFFER_SIZE];
     int passive_open_server_ok = passive_open(socket_response_peer, storage_peer);
-    int server_peer_id;
-    int count_server = 0;
-    int server_active_connection_id;
 
     if (passive_open_server_ok)
     {
@@ -197,30 +206,14 @@ int main(int argc, char **argv)
         }
     }
 
-    // Buffers de dados
-    char sendBufferDataClient[BUFFER_SIZE];
-    char receiveBufferDataClient[BUFFER_SIZE];
-
-    struct user users[BUFFER_SIZE];
-    for (int i = 0; i < BUFFER_SIZE; i++)
+    struct user users[MAX_USERS];
+    for (int i = 0; i < MAX_USERS; i++)
     {
         strncpy(users[i].userId, "", 11);
         users[i].hasPermission = 0;
         users[i].locId = -1;
     }
     struct client clients[BUFFER_SIZE];
-
-    // counts
-    int count_client = 0;
-    int count_user = 0;
-    int activeConnections = 0;
-    int active_connections_peer = 0;
-    int connection_socket_peer;
-
-    int server_passive_connection_id;
-
-    fd_set master_set, read_set;
-    int fdmax;
 
     // Limpa conjunto de descritores
     FD_ZERO(&master_set);
@@ -257,15 +250,15 @@ int main(int argc, char **argv)
                 if (i == socket_response)
                 {
                     int acceptConnectionSocketClient = accept_socket(socket_response, client_storage);
-                    activeConnections++;
-                    if (activeConnections > MAX_CLIENTS)
+                    active_connections++;
+                    if (active_connections > MAX_CLIENTS)
                     {
                         printf("Client limit exceeded\n");
                         memset(sendBufferDataClient, 0, BUFFER_SIZE);
                         snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "Client limit exceeded");
                         send_message(acceptConnectionSocketClient, sendBufferDataClient);
                         close(acceptConnectionSocketClient);
-                        activeConnections--;
+                        active_connections--;
                         continue;
                     }
                     FD_SET(acceptConnectionSocketClient, &master_set);
@@ -325,6 +318,9 @@ int main(int argc, char **argv)
                                 close(socket_response_peer);
                                 exit(EXIT_SUCCESS);
                             }
+                        }
+                        else{
+                            printf("Invalid arguments\n");
                         }
                     }
                 }
@@ -480,7 +476,7 @@ int main(int argc, char **argv)
                                 send_message(i, sendBufferDataClient);
                                 close(i);
                                 FD_CLR(i, &master_set);
-                                activeConnections--;
+                                active_connections--;
                                 continue;
                             }
                             else
@@ -512,7 +508,6 @@ int main(int argc, char **argv)
                                 {
                                     memset(sendBufferDataClient, 0, BUFFER_SIZE);
                                     snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User limit exceeded");
-                                    printf("> ERROR 17\n");
                                 }
                                 else
                                 {
@@ -532,7 +527,7 @@ int main(int argc, char **argv)
                         {
                             char userId[11] = {0};
                             sscanf(receiveBufferDataClient, "38 %10s", userId);
-                            printf("< REQ_USRLOC %s\n", userId);
+                            printf("< REQ_USRLOC\n");
                             int findUserId = find_user(count_user, users, userId);
                             if (findUserId != -1)
                             {
@@ -637,7 +632,7 @@ int main(int argc, char **argv)
                                         strncat(idsBuffer, listIdsLocation[i], remainingSize);
                                         remainingSize -= len;
                                         if (i < countIdsLocation - 1)
-                                        { // Adicionar espaço entre os IDs, mas não no último
+                                        {
                                             if (1 > remainingSize)
                                             { // Verifica espaço para o espaço adicional
                                                 break;
