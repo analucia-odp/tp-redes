@@ -155,6 +155,7 @@ int main(int argc, char **argv)
         FD_SET(socketUserServer, &master_set);
         FD_SET(socketLocationServer, &master_set);
         FD_SET(STDIN_FILENO, &master_set);
+        
         // Espera por atividade em algum dos descritores
         int activity = select(fdmax + 1, &master_set, NULL, NULL, NULL);
         if (activity < 0)

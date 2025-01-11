@@ -253,7 +253,6 @@ int main(int argc, char **argv)
                     active_connections++;
                     if (active_connections > MAX_CLIENTS)
                     {
-                        printf("Client limit exceeded\n");
                         memset(sendBufferDataClient, 0, BUFFER_SIZE);
                         snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "Client limit exceeded");
                         send_message(acceptConnectionSocketClient, sendBufferDataClient);
