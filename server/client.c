@@ -7,8 +7,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <stdbool.h>
-
-#define BUFFER_SIZE 1024
+#include <sys/select.h>
 
 void log_error_message_invalid_arguments()
 {
@@ -40,10 +39,11 @@ void receiveMessage(int socket, char *buffer)
 {
     memset(buffer, 0, BUFFER_SIZE);
     int count = recv(socket, buffer, BUFFER_SIZE, 0);
-    if (count == 0)
+    if (count <= 0)
     {
         // Conexão fechada pelo servidor
-        printf("Server disconnected\n");
+        close(socket);
+        exit(EXIT_FAILURE);
     }
 }
 
@@ -85,13 +85,14 @@ int main(int argc, char **argv)
 
     short int clientId;
 
-    // Recebe resposta do servidor de usuario
-    receiveMessage(socketUserServer, receiveDataBuffer);
     char str[20];
     sprintf(str, "%d", RES_CONN);
     short int clientUserId;
     short int locationUserId;
     int hasConectedUserServer = 0, hasConectedLocationServer = 0;
+
+    // Recebe resposta do servidor de usuario
+    receiveMessage(socketUserServer, receiveDataBuffer);
 
     if (strncmp(receiveDataBuffer, str, strlen(str)) == 0)
     {
@@ -100,8 +101,11 @@ int main(int argc, char **argv)
         clientUserId = clientId;
         hasConectedUserServer = 1;
     }
-    else{
-        printf("%s\n", receiveDataBuffer);
+    if (strncmp(receiveDataBuffer, "255", strlen("255")) == 0)
+    {
+        char message[BUFFER_SIZE];
+        sscanf(receiveDataBuffer, "255 %[^\n]", message);
+        printf("%s\n", message);
     }
     // Recebe resposta do servidor de localização
     receiveMessage(socketLocationServer, receiveDataBuffer);
@@ -112,129 +116,252 @@ int main(int argc, char **argv)
         locationUserId = clientId;
         hasConectedUserServer = 1;
     }
-    else{
-        printf("%s\n", receiveDataBuffer);
+    if (strncmp(receiveDataBuffer, "255", strlen("255")) == 0)
+    {
+        char message[BUFFER_SIZE];
+        sscanf(receiveDataBuffer, "255 %[^\n]", message);
+        printf("%s\n", message);
     }
 
-    if(!hasConectedUserServer && !hasConectedLocationServer){
+    if (!hasConectedUserServer && !hasConectedLocationServer)
+    {
         exit(EXIT_FAILURE);
+    }
+
+    // descritores
+    fd_set master_set;
+    int fdmax;
+
+    // Limpa conjunto de descritores
+    FD_ZERO(&master_set);
+
+    // Adiciona o socket de resposta ao conjunto
+    FD_SET(socketUserServer, &master_set);
+    FD_SET(socketLocationServer, &master_set);
+    FD_SET(STDIN_FILENO, &master_set);
+    fdmax = (socketUserServer > socketLocationServer) ? socketUserServer : socketLocationServer;
+
+    if (STDIN_FILENO > fdmax)
+    {
+        fdmax = STDIN_FILENO;
     }
 
     while (1)
     {
-        // Envio de mensagem
-        memset(sendDataBuffer, 0, BUFFER_SIZE);
-        printf("mensagem > ");
-        fgets(sendDataBuffer, BUFFER_SIZE - 1, stdin);
+        // Limpa conjunto de descritores
+        FD_ZERO(&master_set);
 
-        // Fechamento de conexão
-        if (strcmp(sendDataBuffer, "kill\n") == 0)
+        // Adiciona o socket de resposta ao conjunto
+        FD_SET(socketUserServer, &master_set);
+        FD_SET(socketLocationServer, &master_set);
+        FD_SET(STDIN_FILENO, &master_set);
+        
+        // Espera por atividade em algum dos descritores
+        int activity = select(fdmax + 1, &master_set, NULL, NULL, NULL);
+        if (activity < 0)
         {
-            // SEND REQ_DISC
-            memset(sendDataBuffer, 0, BUFFER_SIZE);
-            snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %hd", REQ_DISC, clientUserId);
-            send_message(socketUserServer, sendDataBuffer);
-            memset(sendDataBuffer, 0, BUFFER_SIZE);
-            snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %hd", REQ_DISC, locationUserId);
-            send_message(socketLocationServer, sendDataBuffer);
-
-            // RCV REQ_DISC
-            receiveMessage(socketUserServer, receiveDataBuffer);
-            if (strstr(receiveDataBuffer, "0") != NULL)
-            {
-                printf("SU Successful disconnect\n");
-            }
-            else if (strstr(receiveDataBuffer, "255") != NULL)
-            {
-                printf("%s\n", receiveDataBuffer);
-            }
-            receiveMessage(socketLocationServer, receiveDataBuffer);
-            if (strstr(receiveDataBuffer, "0") != NULL)
-            {
-                printf("SL Successful disconnect\n");
-            }
-            else if (strstr(receiveDataBuffer, "255") != NULL)
-            {
-                printf("%s\n", receiveDataBuffer);
-            }
-            break;
+            logexit("select error\n");
         }
-
-        // Adiciona usuário
-        else if (strstr(sendDataBuffer, "add") != NULL)
+        if (FD_ISSET(socketUserServer, &master_set))
         {
-            char uuid[10];
-            int isEspecial;
-            sscanf(sendDataBuffer, "add %s %d", uuid, &isEspecial);
-            bool hasValidAdd = strlen(uuid) == 10 && (isEspecial == 0 || isEspecial == 1);
-            if (hasValidAdd)
-            {
-                memset(sendDataBuffer, 0, BUFFER_SIZE);
-                snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s %d", REQ_USRADD, uuid, isEspecial);
-                send_message(socketUserServer, sendDataBuffer);
-                receiveMessage(socketUserServer, receiveDataBuffer);
+            exit(EXIT_SUCCESS);
+        }
+        if (FD_ISSET(socketLocationServer, &master_set))
+        {
+            exit(EXIT_SUCCESS);
+        }
+        if (FD_ISSET(STDIN_FILENO, &master_set))
+        {
+            // Envio de mensagem
+            memset(sendDataBuffer, 0, BUFFER_SIZE);
+            fgets(sendDataBuffer, BUFFER_SIZE - 1, stdin);
 
-                char str[20];
-                sprintf(str, "%d", OK);
-                if (strncmp(receiveDataBuffer, str, strlen(str)) == 0)
+            // Fechamento de conexão
+            if (strcmp(sendDataBuffer, "kill\n") == 0)
+            {
+                // SEND REQ_DISC
+                memset(sendDataBuffer, 0, BUFFER_SIZE);
+                snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %hd", REQ_DISC, clientUserId);
+                send_message(socketUserServer, sendDataBuffer);
+                memset(sendDataBuffer, 0, BUFFER_SIZE);
+                snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %hd", REQ_DISC, locationUserId);
+                send_message(socketLocationServer, sendDataBuffer);
+
+                // RCV REQ_DISC
+                receiveMessage(socketUserServer, receiveDataBuffer);
+                if (strstr(receiveDataBuffer, "0") != NULL)
                 {
-                    char buffer[BUFFER_SIZE];
-                    char buffer2[BUFFER_SIZE];
-                    sscanf(receiveDataBuffer, "0 %s %s", buffer, buffer2);
-                    if (strcmp(buffer2, "add") == 0)
-                    {
-                        printf("New user added: %s\n", uuid);
-                    }
-                    else
-                    {
-                        printf("User updated: %s\n", uuid);
-                    }
+                    printf("SU Successful disconnect\n");
                 }
                 else if (strstr(receiveDataBuffer, "255") != NULL)
                 {
-                    printf("%s\n", receiveDataBuffer);
+                    char message[BUFFER_SIZE];
+                    sscanf(receiveDataBuffer, "255 %[^\n]", message);
+                    printf("%s\n", message);
+                }
+                receiveMessage(socketLocationServer, receiveDataBuffer);
+                if (strstr(receiveDataBuffer, "0") != NULL)
+                {
+                    printf("SL Successful disconnect\n");
+                }
+                else if (strstr(receiveDataBuffer, "255") != NULL)
+                {
+                    char message[BUFFER_SIZE];
+                    sscanf(receiveDataBuffer, "255 %[^\n]", message);
+                    printf("%s\n", message);
+                }
+                break;
+            }
+
+            // Adiciona usuário
+            else if (strstr(sendDataBuffer, "add") != NULL)
+            {
+                char uuid[11] = {0};
+                int isEspecial;
+                sscanf(sendDataBuffer, "add %10s %d", uuid, &isEspecial);
+                bool hasValidAdd = strlen(uuid) == 10 && (isEspecial == 0 || isEspecial == 1);
+                if (hasValidAdd)
+                {
+                    memset(sendDataBuffer, 0, BUFFER_SIZE);
+                    snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s %d", REQ_USRADD, uuid, isEspecial);
+                    send_message(socketUserServer, sendDataBuffer);
+                    receiveMessage(socketUserServer, receiveDataBuffer);
+
+                    char str[20];
+                    sprintf(str, "%d", OK);
+                    if (strncmp(receiveDataBuffer, str, strlen(str)) == 0)
+                    {
+                        char buffer[BUFFER_SIZE];
+                        char buffer2[BUFFER_SIZE];
+                        sscanf(receiveDataBuffer, "0 %s %s", buffer, buffer2);
+                        if (strcmp(buffer2, "add") == 0)
+                        {
+                            printf("New user added: %s\n", uuid);
+                        }
+                        else
+                        {
+                            printf("User updated: %s\n", uuid);
+                        }
+                    }
+                    else if (strstr(receiveDataBuffer, "255") != NULL)
+                    {
+                        char message[BUFFER_SIZE];
+                        sscanf(receiveDataBuffer, "255 %[^\n]", message);
+                        printf("%s\n", message);
+                    }
+                }
+                else
+                {
+                    printf("Invalid arguments\n");
+                }
+            }
+
+            // Encontra localização usuário
+            else if (strstr(sendDataBuffer, "find") != NULL)
+            {
+                char buffer[BUFFER_SIZE];
+                char uuid[11];
+                sscanf(sendDataBuffer, "find %10s", uuid);
+                bool hasValidArgument = strlen(uuid) == 10;
+                if (hasValidArgument)
+                {
+                    memset(sendDataBuffer, 0, BUFFER_SIZE);
+                    snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s", REQ_USRLOC, uuid);
+                    send_message(socketLocationServer, sendDataBuffer);
+                    receiveMessage(socketLocationServer, receiveDataBuffer);
+
+                    char str[20];
+                    sprintf(str, "%d", RES_USRLOC);
+                    if (strncmp(receiveDataBuffer, str, strlen(str)) == 0)
+                    {
+                        short int locId;
+                        sscanf(receiveDataBuffer, "39 %hd", &locId);
+                        printf("Current location: %d\n", locId);
+                    }
+                    else if (strstr(receiveDataBuffer, "255") != NULL)
+                    {
+                        char message[BUFFER_SIZE];
+                        sscanf(receiveDataBuffer, "255 %[^\n]", message);
+                        printf("%s\n", message);
+                    }
+                }
+                else
+                {
+                    printf("Invalid arguments\n");
+                }
+            }
+            // Solicita lista de pessoas presentes em uma determinada localização
+            else if (strncmp(sendDataBuffer, "inspect", strlen("inspect")) == 0)
+            {
+                char uuid[11] = {0};
+                int locId;
+                sscanf(sendDataBuffer, "inspect %10s %d", uuid, &locId);
+                bool hasValidArgument = (strlen(uuid) == 10) && (locId == -1 || (locId >= 1 && locId <= 10));
+                if (hasValidArgument)
+                {
+                    memset(sendDataBuffer, 0, BUFFER_SIZE);
+                    snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s %d", REQ_LOCLIST, uuid, locId);
+                    send_message(socketLocationServer, sendDataBuffer); // Envia apenas para o servidor de ulocalização
+                    receiveMessage(socketLocationServer, receiveDataBuffer);
+
+                    char str[20];
+                    sprintf(str, "%d", RES_LOCLIST);
+                    if (strncmp(receiveDataBuffer, str, strlen(str)) == 0)
+                    {
+                        char idsBuffer[BUFFER_SIZE] = {0};
+                        sscanf(receiveDataBuffer, "41 %[^\n]", idsBuffer);
+                        printf("List of people at the specified location: %s\n", idsBuffer);
+                    }
+                    else if (strstr(receiveDataBuffer, "255") != NULL)
+                    {
+                        char message[BUFFER_SIZE];
+                        sscanf(receiveDataBuffer, "255 %[^\n]", message);
+                        printf("%s\n", message);
+                    }
+                }
+                else
+                {
+                    printf("Invalid arguments\n");
+                }
+            }
+            // Solicita entrada e saída de pessoa
+            else if (strstr(sendDataBuffer, "in") != NULL || strstr(sendDataBuffer, "out") != NULL)
+            {
+                char uuid[11] = {0};
+                char direction[4] = {0};
+                sscanf(sendDataBuffer, "%s %10s", direction, uuid);
+                bool hasValidArgument = (strlen(uuid) == 10);
+                if (hasValidArgument)
+                {
+                    memset(sendDataBuffer, 0, BUFFER_SIZE);
+                    snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s %s", REQ_USRACCESS, uuid, direction);
+                    send_message(socketUserServer, sendDataBuffer); // Envia apenas para o servidor de usuário
+                    receiveMessage(socketUserServer, receiveDataBuffer);
+
+                    char str[20];
+                    sprintf(str, "%d", RES_USRACCESS);
+                    if (strncmp(receiveDataBuffer, str, strlen(str)) == 0)
+                    {
+                        short int locId;
+                        sscanf(receiveDataBuffer, "35 %hd", &locId);
+                        printf("Ok. Last location: %d\n", locId);
+                    }
+                    else if (strstr(receiveDataBuffer, "255") != NULL)
+                    {
+                        char message[BUFFER_SIZE];
+                        sscanf(receiveDataBuffer, "255 %[^\n]", message);
+                        printf("%s\n", message);
+                    }
+                }
+                else
+                {
+                    printf("Invalid arguments\n");
                 }
             }
             else
             {
-                printf("Invalid arguments\n");
+                printf("Invalid command\n");
             }
-        }
-
-        // Encontra localização usuário
-        else if (strstr(sendDataBuffer, "find") != NULL)
-        {
-            char buffer[BUFFER_SIZE];
-            char uuid[10];
-            sscanf(sendDataBuffer, "find %s", uuid);
-            if (strlen(uuid) == 10)
-            {
-                memset(sendDataBuffer, 0, BUFFER_SIZE);
-                snprintf(sendDataBuffer, sizeof(sendDataBuffer), "%d %s", REQ_USRLOC, uuid);
-                send_message(socketLocationServer, sendDataBuffer);
-                receiveMessage(socketLocationServer, receiveDataBuffer);
-
-                char str[20];
-                sprintf(str, "%d", RES_USRLOC);
-                if (strncmp(receiveDataBuffer, str, strlen(str)) == 0)
-                {
-                    short int locId;
-                    sscanf(receiveDataBuffer, "39 %hd", &locId);
-                    printf("Current location: %d\n", locId);
-                }
-                else if (strstr(receiveDataBuffer, "255") != NULL)
-                {
-                    printf("%s\n", receiveDataBuffer);
-                }
-            }
-            else{
-                printf("Invalid arguments\n");
-            }
-        }
-
-        else
-        {
-            printf("Invalid command\n");
         }
     }
 
