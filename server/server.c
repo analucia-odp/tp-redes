@@ -254,6 +254,7 @@ int main(int argc, char **argv)
                     active_connections++;
                     if (active_connections > MAX_CLIENTS)
                     {
+                        printf("ERROR 09\n");
                         memset(sendBufferDataClient, 0, BUFFER_SIZE);
                         snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "Client limit exceeded");
                         send_message(acceptConnectionSocketClient, sendBufferDataClient);
@@ -377,6 +378,7 @@ int main(int argc, char **argv)
                             {
                                 memset(sendBufferDataClient, 0, BUFFER_SIZE);
                                 snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "Client not found");
+                                printf("ERROR 10\n");
                             }
                         }
 
@@ -402,6 +404,7 @@ int main(int argc, char **argv)
                                 {
                                     memset(sendBufferDataClient, 0, BUFFER_SIZE);
                                     snprintf(sendBufferDataClient, BUFFER_SIZE, "%d %s", ERROR, "User limit exceeded");
+                                    printf("ERROR 17\n");
                                 }
                                 else
                                 {
